@@ -1,7 +1,9 @@
 const express = require('express');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const authRoutes = require('./routes/auth.routes');
 const itemsRoutes = require('./routes/items.routes');
+const adminRoutes = require('./routes/admin.routes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -14,7 +16,9 @@ app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/items', itemsRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // 404 for any route we haven't defined
 app.use((req, res) => {

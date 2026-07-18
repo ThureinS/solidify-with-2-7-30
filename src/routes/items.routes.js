@@ -1,6 +1,6 @@
 const express = require('express');
 const validate = require('../middleware/validate');
-const devUser = require('../middleware/devUser');
+const requireAuth = require('../middleware/auth');
 const controller = require('../controllers/items.controller');
 const {
   createItemSchema,
@@ -11,8 +11,7 @@ const { reviewActionSchema, dueQuerySchema } = require('../dto/review.schemas');
 
 const router = express.Router();
 
-// TEMPORARY: replaced by real JWT auth middleware in Part 5.
-router.use(devUser);
+router.use(requireAuth);
 
 router.post('/', validate(createItemSchema), controller.createItem);
 router.get('/', validate(listItemsQuerySchema, 'query'), controller.listItems);
