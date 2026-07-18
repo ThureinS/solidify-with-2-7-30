@@ -1,12 +1,58 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ReviewResult {
+  REVIEWED
+  SKIPPED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  isSuspended  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  items Item[]
+
+  @@map("users")
+}
+
+model Item {
+  id             String    @id @default(uuid())
+  userId         String
+  text           String
+  dateAdded      DateTime  @db.Date
+  nextReviewDate DateTime  @db.Date
+  stage          Int       @default(0)
+  isComplete     Boolean   @default(false)
+  deletedAt      DateTime? @db.Date
+
+  user    User     @relation(fields: [userId], references: [id])
+  reviews Review[]
+
+  @@index([userId, nextReviewDate])
+  @@map("items")
+}
+
+model Review {
+  id     String       @id @default(uuid())
+  itemId String
+  date   DateTime     @db.Date
+  result ReviewResult
+
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@map("reviews")
 }
