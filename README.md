@@ -33,6 +33,31 @@ npm test                      # runs the scheduling unit tests
 
 API docs (Swagger UI, every endpoint with an example): `GET /api/v1/docs`.
 
+## Deploying (Neon + Vercel)
+
+1. Create a Vercel project from this repo and, from the Vercel Marketplace,
+   install the **Neon** integration ("Vercel-managed" option creates the Neon
+   account/project for you). It auto-injects `DATABASE_URL` (pooled) and
+   `DATABASE_URL_UNPOOLED` (direct) as Vercel environment variables.
+2. Add `JWT_SECRET` yourself in Vercel's project environment variables (any
+   long random string, same as local).
+3. Apply migrations to Neon once, manually, from your machine, using the
+   **direct** (unpooled) connection string — pooled connections don't
+   reliably support the locking Prisma Migrate needs:
+   ```bash
+   DATABASE_URL_UNPOOLED="<paste Neon's direct connection string>" npx prisma migrate deploy
+   ```
+4. Deploy. Vercel auto-detects the Express app straight from `src/app.js`
+   (no `vercel.json` or extra entry file needed for the standard case).
+5. Verify on the deployed URL, in order: `/api/v1/health` → register → login
+   → add an item → due queue → review → **open `/api/v1/docs` in a browser
+   and confirm it actually renders** (Swagger UI serves static assets via
+   `express.static`, which Vercel's docs flag as unsupported in some cases —
+   don't assume a 200 on the HTML means the page looks right; if the styling
+   is broken, point `swaggerUi.setup()` at a CDN copy of the CSS/JS instead
+   of the locally-bundled one).
+6. First request after idle will be slow (cold start) — that's normal.
+
 ## Endpoints
 
 | Method | Path | Auth | Notes |

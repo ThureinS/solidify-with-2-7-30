@@ -9,6 +9,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Migrations need a direct (non-pooled) connection -- pooled connections
+    // (through PgBouncer) don't reliably support the locking Prisma Migrate
+    // uses. Locally there's no pooler, so DATABASE_URL_UNPOOLED is unset and
+    // this just falls back to the regular DATABASE_URL.
+    url: process.env["DATABASE_URL_UNPOOLED"] || process.env["DATABASE_URL"],
   },
 });

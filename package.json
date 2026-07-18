@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node --env-file=.env src/server.js",
     "dev": "nodemon --env-file=.env src/server.js",
     "test": "vitest run",
-    "seed": "node --env-file=.env prisma/seed.js"
+    "seed": "node --env-file=.env prisma/seed.js",
+    "postinstall": "prisma generate"
   },
   "repository": {
     "type": "git",
