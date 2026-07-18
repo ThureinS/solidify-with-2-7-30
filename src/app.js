@@ -13,6 +13,20 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 const openapiDocument = yaml.load(fs.readFileSync(path.join(__dirname, '../openapi.yaml'), 'utf8'));
 
+// swagger-ui-express normally serves its CSS/JS from the swagger-ui-dist
+// package on disk, but Vercel's build doesn't reliably include those files
+// in the deployed function bundle (confirmed: they 200 with the wrong
+// content-type, silently falling through to our own catch-all handler
+// instead of 404ing). Loading them from a CDN instead sidesteps needing
+// those files to exist in the bundle at all. Version pinned to match the
+// installed swagger-ui-dist exactly, to avoid a template/asset mismatch.
+const swaggerUiDistVersion = require('swagger-ui-dist/package.json').version;
+const swaggerCdnBase = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${swaggerUiDistVersion}`;
+const swaggerOptions = {
+  customCssUrl: `${swaggerCdnBase}/swagger-ui.css`,
+  customJs: [`${swaggerCdnBase}/swagger-ui-bundle.js`, `${swaggerCdnBase}/swagger-ui-standalone-preset.js`],
+};
+
 const app = express();
 
 app.use(morgan('dev'));
@@ -23,7 +37,12 @@ app.use(express.json({ limit: '64kb' }));
 // below so this route only ever gets the relaxed instance -- once helmet()
 // has already set the strict CSP header for a request, a second helmet
 // call further down the chain can't un-set it.
-app.use('/api/v1/docs', helmet({ contentSecurityPolicy: false }), swaggerUi.serve, swaggerUi.setup(openapiDocument));
+app.use(
+  '/api/v1/docs',
+  helmet({ contentSecurityPolicy: false }),
+  swaggerUi.serve,
+  swaggerUi.setup(openapiDocument, swaggerOptions),
+);
 
 app.use(helmet());
 
