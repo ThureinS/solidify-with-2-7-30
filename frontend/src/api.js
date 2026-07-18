@@ -1,0 +1,62 @@
+const BASE_URL = import.meta.env.VITE_API_URL;
+
+// The backend's "today" must be the user's local calendar date, not UTC --
+// new Date().toISOString() gives the UTC date, which is a day off from the
+// user's actual local date near midnight. This is the same date-safety
+// concern the backend was built around, now on the client side of it.
+export function todayLocal() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+async function request(path, { token, ...options } = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const data = res.status === 204 ? null : await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+export function register(email, password) {
+  return request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+
+export function login(email, password) {
+  return request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+
+export function createItem(token, text) {
+  return request('/items', {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ text, date: todayLocal() }),
+  });
+}
+
+export function getDueItems(token) {
+  return request(`/items/due?date=${todayLocal()}`, { token });
+}
+
+export function reviewItem(token, itemId) {
+  return request(`/items/${itemId}/review`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ date: todayLocal() }),
+  });
+}
+
+export function skipItem(token, itemId) {
+  return request(`/items/${itemId}/skip`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ date: todayLocal() }),
+  });
+}

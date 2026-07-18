@@ -21,6 +21,12 @@ Node.js + Express, PostgreSQL via Prisma, JWT auth (bcrypt password
 hashing), Zod validation, Vitest for the scheduling-logic tests, Docker
 Compose for local Postgres, GitHub Actions for CI.
 
+A minimal React (Vite) frontend covering the core loop (register/login, add
+an item, review/skip what's due) lives in [`frontend/`](./frontend) --
+bonus scope beyond the original course spec, kept isolated with its own
+`package.json` and not part of the backend's CI/deploy. See its README for
+how to run it.
+
 ## Running locally
 
 ```bash
