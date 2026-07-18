@@ -29,4 +29,14 @@ function toItemDetail(item) {
   };
 }
 
-module.exports = { toItemSummary, toItemDetail };
+function itemStatus(item) {
+  if (item.deletedAt) return 'deleted';
+  if (item.isComplete) return 'archived';
+  return 'active';
+}
+
+function toExportItem(item) {
+  return { ...toItemDetail(item), status: itemStatus(item) };
+}
+
+module.exports = { toItemSummary, toItemDetail, toExportItem };

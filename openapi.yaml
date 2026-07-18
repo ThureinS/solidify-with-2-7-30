@@ -1,0 +1,426 @@
+openapi: 3.0.3
+info:
+  title: Spaced Repetition Review Tracker API
+  description: >
+    Backend for a personal spaced-repetition learning tracker using the
+    2-7-30 review method: the first review is due 2 calendar days after an
+    item is added; after each completed review, the next is scheduled 7 and
+    then 30 days from the completion date; after the third review the item
+    is archived.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            code:
+              type: string
+      example:
+        error:
+          message: Item not found
+          code: NOT_FOUND
+
+    AuthUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [USER, ADMIN] }
+        isSuspended: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        result: { type: string, enum: [REVIEWED, SKIPPED] }
+
+    ItemCore:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        stage: { type: integer, enum: [0, 1, 2], description: "0 = awaiting 2-day review, 1 = awaiting 7-day, 2 = awaiting 30-day" }
+        dateAdded: { type: string, format: date }
+        nextReviewDate: { type: string, format: date }
+        isComplete: { type: boolean }
+
+    ItemSummary:
+      allOf:
+        - $ref: '#/components/schemas/ItemCore'
+        - type: object
+          properties:
+            preview: { type: string, description: First 80 characters of the item's text }
+
+    ItemDetail:
+      allOf:
+        - $ref: '#/components/schemas/ItemCore'
+        - type: object
+          properties:
+            text: { type: string }
+            deletedAt: { type: string, format: date, nullable: true }
+            reviews:
+              type: array
+              items: { $ref: '#/components/schemas/Review' }
+
+  parameters:
+    ItemId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              example: { status: ok }
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, description: Must contain at least one letter and one number }
+            example: { email: "newuser@example.com", password: "Passw0rd" }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthUser' }
+              example:
+                id: 4c55123b-85fc-46e0-a7ce-32843d78e8b4
+                email: newuser@example.com
+                role: USER
+                isSuspended: false
+                createdAt: "2026-07-18T09:25:02.196Z"
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/login:
+    post:
+      summary: Log in and receive a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+            example: { email: "demo@example.com", password: "Demo1234" }
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Account is suspended
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many attempts -- rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/me:
+    get:
+      summary: Get the logged-in user's own account info
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthUser' }
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /items:
+    post:
+      summary: Create a new learning item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, date]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 10000 }
+                date: { type: string, format: date, description: "Client's today, YYYY-MM-DD" }
+            example: { text: "The mitochondria is the powerhouse of the cell.", date: "2026-07-18" }
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+    get:
+      summary: List own items (paginated, filterable by status)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, archived, all], default: active }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: A page of items
+          content:
+            application/json:
+              example:
+                items: []
+                page: 1
+                limit: 20
+                total: 0
+
+  /items/due:
+    get:
+      summary: List items due on or before a given date
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Items due for review
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ItemSummary' }
+
+  /items/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    get:
+      summary: Get one item with full text and review history
+      responses:
+        '200':
+          description: Item detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+        '404':
+          description: Not found (missing, deleted, or not yours)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    patch:
+      summary: Edit an item's text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 10000 }
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+    delete:
+      summary: Soft-delete an item
+      responses:
+        '204':
+          description: Deleted
+
+  /items/{id}/review:
+    post:
+      summary: Record a review for a due item and advance its schedule
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                date: { type: string, format: date }
+            example: { date: "2026-07-18" }
+      responses:
+        '200':
+          description: Item after advancing (or archived)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+        '409':
+          description: Item is not due yet, or already archived
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /items/{id}/skip:
+    post:
+      summary: Skip a due item -- pushes it to the next day
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                date: { type: string, format: date }
+            example: { date: "2026-07-18" }
+      responses:
+        '200':
+          description: Item with nextReviewDate pushed by one day
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+        '409':
+          description: Item is not due yet, or already archived
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /export:
+    get:
+      summary: Export all of the logged-in user's own data as JSON
+      parameters:
+        - name: includeDeleted
+          in: query
+          schema: { type: string, enum: ['true', 'false'], default: 'false' }
+      responses:
+        '200':
+          description: Full data export
+          content:
+            application/json:
+              example:
+                user:
+                  id: 9c914d83-2668-4ee8-ad7b-dd6d053fafb4
+                  email: demo@example.com
+                  role: USER
+                  isSuspended: false
+                  createdAt: "2026-07-18T09:24:45.458Z"
+                items:
+                  - id: 3f24534e-958b-486c-80d3-7dbd2a3490b1
+                    text: "Due today: awaiting the 2-day review."
+                    stage: 0
+                    dateAdded: "2026-07-16"
+                    nextReviewDate: "2026-07-18"
+                    isComplete: false
+                    deletedAt: null
+                    status: active
+                    reviews: []
+
+  /admin/users:
+    get:
+      summary: List all users (admin only)
+      responses:
+        '200':
+          description: A page of users
+          content:
+            application/json:
+              example:
+                users: []
+                page: 1
+                limit: 20
+                total: 0
+        '403':
+          description: Not an admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/users/{id}/suspend:
+    post:
+      summary: Suspend a user (admin only, cannot suspend self)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: User suspended
+        '403':
+          description: Not an admin, or attempting to suspend yourself
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/users/{id}/unsuspend:
+    post:
+      summary: Unsuspend a user (admin only)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: User unsuspended
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
