@@ -214,3 +214,32 @@
 1. Why production needs two different database connection strings (`DATABASE_URL` and `DATABASE_URL_UNPOOLED`) when local development only ever used one.
 2. What `"postinstall": "prisma generate"` actually means — when does it run, and why is that a better fit here than a platform-specific script name like `"vercel-build"`?
 3. Why a `200` status code on `/api/v1/docs` wasn't, by itself, proof that Swagger UI was working correctly — what else had to be checked, and why?
+
+## 2026-07-18 — Bonus: minimal React frontend + CORS
+
+Not part of the original course spec — `submission-requirements.md` explicitly backlogs "the frontend UI." Built and deployed anyway, by request, kept isolated so the backend stays a clean, self-contained course deliverable on its own.
+
+**What was built**
+- **CORS support on the backend** (`cors` package, `CORS_ORIGIN` env var, comma-separated allowlist defaulting to the Vite dev server's port). The API previously sent no CORS headers at all, which would silently block every `fetch()` from a browser on a different origin — this had to land on the already-deployed, already-"done" backend before any frontend work could talk to it.
+- **`frontend/`**: a Vite + React app, isolated with its own `package.json`, not wired into the backend's CI or deploy. Three files hold essentially the whole app: `api.js` (a small `fetch` wrapper, one function per endpoint used), `AuthForm.jsx` (login/register, toggled by one piece of state), `Dashboard.jsx` (add-item form + due-today list with Review/Skip buttons). `App.jsx` just decides which of the two to show, based on whether a JWT exists.
+- Scope deliberately kept to the core loop only: register/login → store token → add an item → see what's due → review/skip it. Editing, deleting, export, and the entire admin surface are left backend-only (reachable via Swagger) — a beginner shouldn't build UI for 16 endpoints in one sitting when 5 already tell the whole story.
+- **Deployed as its own separate Vercel project**, root directory set to `frontend/`, `VITE_API_URL` set at build time (Vite bakes `VITE_`-prefixed env vars into the bundle during `vite build` — this can't be changed after the fact without rebuilding). Turned off Deployment Protection on this new project too, same as the backend.
+- Verified twice with a real browser (via Playwright, not just curl): once locally (register → auto-login → add item → log out → log back in as the seeded demo user → due queue renders with correct stage labels → Review correctly removes the item from the queue, zero console errors) and once again fully deployed (frontend's own Vercel URL calling the backend's own Vercel URL, register → auto-login → add item, zero *new* console errors).
+
+**Key decisions and why**
+- **`localStorage` for the JWT**, not an in-memory-only variable. Simplest option — survives a page refresh — consistent with this project's existing risk posture (client-trusted dates, no refresh tokens, all previously accepted for the same reason: this is a personal tool, not a high-value target). A more secure httpOnly-cookie-based approach would need backend changes to issue/read cookies instead of a bearer token, which is real added scope for marginal benefit here.
+- **The frontend computes "today" from the browser's local date components** (`getFullYear`/`getMonth`/`getDate`), not `toISOString().slice(0,10)`. The backend was built entirely around trusting the client's date — `new Date().toISOString()` gives the *UTC* date, which is a day off from the user's actual calendar date near midnight in most timezones. Using the local components is the frontend's half of the same timezone-safety concern the backend's `lib/dates.js` was designed around from Part 2 onward.
+- **Two separate Vercel projects (backend and frontend), not one combined deployment.** Keeps the backend a clean, independent, gradeable artifact; the frontend is explicitly bonus and can be deleted or ignored without touching the backend at all.
+
+**Problems hit and how they were solved**
+- **Logging in with the seeded `demo@example.com` account failed on the deployed frontend** (`401 Invalid email or password`) even though CORS was confirmed fixed. Not a bug: that account only ever existed in the *local* Docker Postgres database (created by `npm run seed`, which was never run against the production Neon database — only `prisma migrate deploy` was, deliberately, to create the schema without seeding fake data into production). Resolved by registering a fresh account directly against the deployed frontend instead, which worked immediately.
+- **The first deploy of the frontend hit the exact same CORS block it was built to avoid** — expected, since the backend's `CORS_ORIGIN` only had `localhost:5173` in it at that point. Confirmed the exact failure in the browser console (`No 'Access-Control-Allow-Origin' header is present`), added the new frontend's deployed URL to the backend's `CORS_ORIGIN`, redeployed the backend, and re-verified in the browser that the same login attempt then succeeded with zero CORS errors.
+
+**New concepts introduced**
+- **CORS (Cross-Origin Resource Sharing)**: the browser's own security rule that blocks a page from `fetch()`-ing a different origin (different domain, subdomain, or port) unless that other server explicitly says "requests from your origin are allowed" via response headers. It's enforced by the *browser*, not the server — `curl` never triggers or respects it at all, which is exactly why this had to be tested in a real browser to catch.
+- **Vite env var baking**: variables prefixed `VITE_` get compiled directly into the JavaScript bundle at `vite build` time, not read fresh at runtime like a backend's `process.env`. Changing one after deploying requires a full rebuild, not just an environment variable edit.
+
+**You should be able to explain**
+1. Why the CORS error only showed up in a real browser and never in any of the `curl` testing used throughout the rest of this project.
+2. Why the frontend computes "today" from `getFullYear`/`getMonth`/`getDate` instead of `new Date().toISOString().slice(0, 10)`, and what would go wrong near midnight if it didn't.
+3. Why logging into the deployed frontend with the local seed script's `demo@example.com` account failed, and what that reveals about the difference between the local and production databases.
