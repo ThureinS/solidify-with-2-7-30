@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cors = require('cors');
 const yaml = require('js-yaml');
 const swaggerUi = require('swagger-ui-express');
 const authRoutes = require('./routes/auth.routes');
@@ -28,6 +29,15 @@ const swaggerOptions = {
 };
 
 const app = express();
+
+// The frontend (a separate origin -- Vite dev server locally, its own
+// deployed URL in prod) needs the browser's permission to call this API.
+// CORS_ORIGIN is a comma-separated allowlist; defaults to the Vite dev
+// server port so local frontend dev works with zero config.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim());
+app.use(cors({ origin: allowedOrigins }));
 
 app.use(morgan('dev'));
 app.use(express.json({ limit: '64kb' }));
