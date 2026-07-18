@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { AppError } = require('../middleware/errorHandler');
 const { parseDate, addDays } = require('../lib/dates');
+const schedule = require('./schedule.service');
 
 const FIRST_REVIEW_OFFSET_DAYS = 2;
 
@@ -56,4 +57,48 @@ async function softDeleteItem(userId, id) {
   if (count === 0) throw new AppError(404, 'NOT_FOUND', 'Item not found');
 }
 
-module.exports = { createItem, listItems, getItemById, updateItemText, softDeleteItem };
+async function listDueItems(userId, date) {
+  return prisma.item.findMany({
+    where: { userId, deletedAt: null, isComplete: false, nextReviewDate: { lte: parseDate(date) } },
+    orderBy: { nextReviewDate: 'asc' },
+  });
+}
+
+async function findOwnedItem(userId, id) {
+  const item = await prisma.item.findFirst({ where: { id, userId, deletedAt: null } });
+  if (!item) throw new AppError(404, 'NOT_FOUND', 'Item not found');
+  return item;
+}
+
+async function reviewItem(userId, id, date) {
+  const item = await findOwnedItem(userId, id);
+  const nextState = schedule.applyReview(item, date); // throws AppError if not allowed
+
+  await prisma.$transaction([
+    prisma.review.create({ data: { itemId: id, date: parseDate(date), result: 'REVIEWED' } }),
+    prisma.item.update({ where: { id }, data: nextState }),
+  ]);
+  return getItemById(userId, id);
+}
+
+async function skipItem(userId, id, date) {
+  const item = await findOwnedItem(userId, id);
+  const nextState = schedule.applySkip(item, date); // throws AppError if not allowed
+
+  await prisma.$transaction([
+    prisma.review.create({ data: { itemId: id, date: parseDate(date), result: 'SKIPPED' } }),
+    prisma.item.update({ where: { id }, data: nextState }),
+  ]);
+  return getItemById(userId, id);
+}
+
+module.exports = {
+  createItem,
+  listItems,
+  getItemById,
+  updateItemText,
+  softDeleteItem,
+  listDueItems,
+  reviewItem,
+  skipItem,
+};

@@ -47,4 +47,40 @@ async function deleteItem(req, res, next) {
   }
 }
 
-module.exports = { createItem, listItems, getItem, updateItem, deleteItem };
+async function listDue(req, res, next) {
+  try {
+    const items = await itemsService.listDueItems(req.userId, req.validatedQuery.date);
+    res.json(items.map(toItemSummary));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reviewItem(req, res, next) {
+  try {
+    const item = await itemsService.reviewItem(req.userId, req.params.id, req.body.date);
+    res.json(toItemDetail(item));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function skipItem(req, res, next) {
+  try {
+    const item = await itemsService.skipItem(req.userId, req.params.id, req.body.date);
+    res.json(toItemDetail(item));
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  createItem,
+  listItems,
+  getItem,
+  updateItem,
+  deleteItem,
+  listDue,
+  reviewItem,
+  skipItem,
+};

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --env-file=.env src/server.js",
     "dev": "nodemon --env-file=.env src/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "node --env-file=.env prisma/seed.js"
   },
   "repository": {
     "type": "git",
