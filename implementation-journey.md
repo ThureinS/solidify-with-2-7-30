@@ -243,3 +243,29 @@ Not part of the original course spec — `submission-requirements.md` explicitly
 1. Why the CORS error only showed up in a real browser and never in any of the `curl` testing used throughout the rest of this project.
 2. Why the frontend computes "today" from `getFullYear`/`getMonth`/`getDate` instead of `new Date().toISOString().slice(0, 10)`, and what would go wrong near midnight if it didn't.
 3. Why logging into the deployed frontend with the local seed script's `demo@example.com` account failed, and what that reveals about the difference between the local and production databases.
+
+## 2026-07-20 — Bonus: "All items" list view + visual reskin
+
+Started from a gap analysis: comparing every backend endpoint against what the frontend actually calls. Out of 14 endpoints, only 6 were wired up (register, login, create item, due queue, review, skip) — the rest (full item list, item detail, edit, delete, admin panel, export, `/auth/me`) had no UI at all. Asked for a full list view specifically, since there was no way to see anything besides today's due queue.
+
+**What was built**
+- **"All items" tab** in `Dashboard.jsx`, alongside the existing "Due today" tab. Calls `GET /items` (already built on the backend, just never called from the frontend) with a status filter (Active / Archived / All) and Prev/Next pagination. `frontend/src/api.js` got one new function, `listItems(token, { status, page })`.
+- **Visual reskin** of the whole frontend (`App.css`, `index.css`), inspired by the visual language of withnovu.com (a marketing site) — not a literal copy, since that site's actual content (hero photo, testimonials, FAQ accordion) doesn't apply to a functional CRUD dashboard. What carried over: a warm off-white background, near-black text, one terracotta accent color used consistently for primary actions, big soft-radius cards replacing the old hairline-bordered list rows, and more generous whitespace.
+
+**Key decisions and why**
+- **CSS custom properties** (`--color-accent`, `--color-bg`, etc.) defined once in `index.css`'s `:root`, referenced everywhere else with `var(--color-accent)`. Changing the accent color is a one-line edit instead of hunting through every button/border rule.
+- **Light-only, not light+dark.** The old `index.css` had `color-scheme: light dark`, which let the browser auto-invert form controls in dark mode — but nothing was actually *designed* for dark mode, so it was accidental behavior, not a real feature. Dropped it rather than build a second palette for a bonus learning project.
+- **Edit, delete, admin panel, and export were deliberately left out of this pass.** You asked specifically to fix "I can't find my full list" — adding a full CRUD/admin surface on top of that would have been scope creep beyond what was asked. They're still open gaps, listed below.
+
+**Problems hit and how they were solved**
+- **Local Postgres wasn't running** (Docker Desktop itself was closed), so the due-list API calls failed with `ECONNREFUSED` when testing in the browser. Fixed by starting Docker Desktop and running `docker compose up -d` for the project's `db` container.
+- **Styling the active vs. inactive tab** without changing any JSX logic. `Dashboard.jsx`'s tab buttons don't have a dedicated "active" class — the inactive tab renders `<button className="secondary">`, the active one renders a plain `<button>` with no class at all. Solved with CSS specificity: `.tabs button` styles the active (unclassed) button, `.tabs button.secondary` (two classes, so it wins) overrides it for the inactive one — no new component state needed.
+
+**New concepts introduced**
+- **CSS custom properties (CSS variables)**: a named value (e.g. `--color-accent: #c1662b`) defined once and reused anywhere with `var(--color-accent)`. Distinct from Sass/Less variables — these are real, live values the browser resolves at render time.
+- **CSS specificity**: the browser's rule for which of several matching CSS rules wins when they conflict. More/narrower selectors (two classes) beat fewer/broader ones (one class), regardless of which rule appears later in the file — this is what let the tab styling work without touching `Dashboard.jsx`'s logic.
+
+**You should be able to explain**
+1. What does the `status` query param on `GET /items` do, and what's the difference between `active`, `archived`, and `all`?
+2. Why does changing one line (`--color-accent`) in `index.css` update the Add Item button, the active tab underline, and the Review button all at once?
+3. Why did styling the active/inactive tabs need `.tabs button.secondary` as a selector instead of adding an `.active` class in the JSX — what does that say about how the two tab buttons are actually rendered?
