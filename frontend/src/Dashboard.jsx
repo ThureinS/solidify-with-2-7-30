@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createItem, getDueItems, listItems, reviewItem, skipItem } from './api';
+import { createItem, exportData, getDueItems, listItems, reviewItem, skipItem, todayLocal } from './api';
 import ItemDetail from './ItemDetail';
 import AdminPanel from './AdminPanel';
 import Pagination from './Pagination';
@@ -18,6 +18,7 @@ export default function Dashboard({ token, user, onLogout }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const limit = 20;
 
   async function refreshDueItems() {
@@ -76,6 +77,25 @@ export default function Dashboard({ token, user, onLogout }) {
     try {
       await skipItem(token, itemId);
       await refreshDueItems();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Fetch the export JSON, then trigger a browser download of it as a file.
+  // The Blob + temporary <a> is the standard client-side "save this data"
+  // pattern -- the server just returns JSON, the browser does the saving.
+  async function handleExport() {
+    try {
+      const data = await exportData(token, includeDeleted);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `my-items-${todayLocal()}.json`;
+      a.click();
+      URL.revokeObjectURL(url); // release the object URL once the download has started
+      setError('');
     } catch (err) {
       setError(err.message);
     }
@@ -169,20 +189,36 @@ export default function Dashboard({ token, user, onLogout }) {
         )
       ) : view === 'all' ? (
         <>
-          <label className="status-filter">
-            Status
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setPage(1);
-                setStatusFilter(e.target.value);
-              }}
-            >
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-              <option value="all">All</option>
-            </select>
-          </label>
+          <div className="all-toolbar">
+            <label className="status-filter">
+              Status
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setStatusFilter(e.target.value);
+                }}
+              >
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+
+            <div className="export-controls">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeDeleted}
+                  onChange={(e) => setIncludeDeleted(e.target.checked)}
+                />
+                Include deleted
+              </label>
+              <button type="button" className="secondary" onClick={handleExport}>
+                Download my items
+              </button>
+            </div>
+          </div>
 
           {allItems.length === 0 ? (
             <p>No items.</p>

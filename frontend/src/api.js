@@ -96,6 +96,14 @@ export function listUsers(token, { page = 1 } = {}) {
   return request(`/admin/users?page=${page}`, { token });
 }
 
+// GET /export returns JSON { user, items } (not a file stream), so request()
+// parses it like any other call; the component turns that object into a Blob
+// download. includeDeleted is sent as the literal string 'true'/'false' the
+// backend enum expects.
+export function exportData(token, includeDeleted = false) {
+  return request(`/export?includeDeleted=${includeDeleted}`, { token });
+}
+
 // suspend/unsuspend return 204 -> request() resolves to null, like deleteItem.
 export function suspendUser(token, userId) {
   return request(`/admin/users/${userId}/suspend`, { token, method: 'POST' });

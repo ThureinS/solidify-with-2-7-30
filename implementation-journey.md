@@ -340,3 +340,38 @@ Wired the admin surface into the frontend: an ADMIN-only tab listing all users w
 1. *What actually keeps a non-admin out of `/admin/users`?* The **server middleware** (`requireAuth, requireAdmin` in `src/routes/admin.routes.js`), not the hidden tab. Analogy: a nightclub. The **bouncer at the VIP door** = the middleware; **leaving "VIP" off the public map** = hiding the Admin tab. Not printing it on the map stops nobody — someone who knows the door is there can still walk up, and the bouncer turns them away. Concretely: a regular user can open the browser console and `fetch('/api/v1/admin/users')` directly; the server returns **403** regardless of what the UI showed. Hiding the tab is *cosmetic UX* (don't show buttons that would fail), never authorization.
 2. *Why fetch `/auth/me` instead of reading the role from the JWT the browser already has?* Because a **JWT is a frozen snapshot from login time** — it can't update itself. Example: admin Alice logs in (token says `role: ADMIN`). Another admin then **suspends** Alice. Her token *still says* ADMIN / not-suspended, so trusting it would keep showing her the Admin tab. `/auth/me` asks the server for the **live current state**, which returns suspended → 401/403 → logout. Token = stale snapshot; `/auth/me` = current truth. (Also: no client-side decode code, and one source of truth.)
 3. *Why was "logout on any failure" wrong, and what does the fix check?* The client reacts to the **HTTP status of the failed `/auth/me` request** (401/403 = session genuinely over → logout; 5xx / offline = transient → keep the token), not to the token's contents. Related: when a token *expires*, there's no refresh token by design (7-day JWT), so the user simply **logs in again** to get a fresh one.
+
+## 2026-07-21 — Bonus: export slice (Download my items) — frontend now 14/14
+
+Wired the last unused backend endpoint, `GET /export`, into the UI: an **Include deleted** checkbox + a **Download my items** button on the "All items" view. The frontend now exercises **all 14 backend endpoints**. Small slice, so we skipped the heavy feature-dev process and worked lean.
+
+**What was built**
+- **`api.js`**: `exportData(token, includeDeleted = false)` — a one-liner that calls `GET /export?includeDeleted=...` through the same `request()` helper as every other call.
+- **`Dashboard.jsx`**: an `includeDeleted` piece of state, a `handleExport()` that fetches the JSON and saves it as a file, and the checkbox + button placed next to the existing Status filter.
+- **`App.css`**: a small `.all-toolbar` flex row (filter left, export controls right) and inline-checkbox styling. No new colors, no new dependencies.
+
+**Key decisions and why**
+- **Reused `request()` instead of a separate file-download fetch.** The instinct with a "download" is that you need a special binary path (a `blob()` response, a streamed file). But `GET /export` doesn't stream a file — the backend just does `res.json({ user, items })`, plain JSON with **no `Content-Disposition` header**. So the ordinary helper that parses JSON is exactly right; the "download" is a *client-side* step, not a server one.
+- **The download is Blob + a temporary `<a download>`.** We take the parsed object, `JSON.stringify` it, wrap it in a `Blob`, make a temporary object URL, create an off-screen `<a>` with a `download` filename (`my-items-YYYY-MM-DD.json`), `.click()` it, then revoke the URL. This is the standard browser "save this data as a file" pattern — the server returned data, the browser does the saving.
+- **`includeDeleted` is sent as the literal string `'true'`/`'false'`.** The backend schema is a two-value enum (`z.enum(['true','false'])`), *deliberately* not `z.coerce.boolean()` — because `Boolean("false")` is `true` in JS (any non-empty string is truthy), which would be a silent foot-gun. So the client sends the exact strings the enum expects.
+- **Placement + toggle were your calls:** control on the All items view (thematically "your items," already hosts filter controls), and the deleted option exposed as a checkbox so the feature is visible rather than hidden.
+
+**Problems hit and how they were solved**
+- **A checkbox styled like a giant text box.** The global `input, select, textarea` CSS rule (padding, border, radius) also hit the new checkbox and made it look wrong. Fixed with a scoped `.export-controls input[type='checkbox']` override (small fixed size, no padding, `accent-color: var(--color-accent)`), so the checkbox stays a checkbox and still uses the brand terracotta.
+- **DB table names aren't the Prisma model names.** Cleaning up test data, `DELETE FROM "Item"` failed — the actual Postgres tables are lowercase plural (`items`, `reviews`, `users`) because the Prisma schema maps them with `@@map`. Worth remembering for any direct `psql` work.
+
+**How we verified (end-to-end)**
+- Backend via `curl`: no token → **401**; with token → JSON `{ user, items }`; created two items and soft-deleted one, then `includeDeleted=false` returned **1** item and `includeDeleted=true` returned **2**.
+- UI via Playwright: the control renders on-brand next to the Status filter; clicking Download produced `my-items-2026-07-21.json`; **unchecked → 1 item** in the file, **checked → 2 items** (the soft-deleted one included), each item carrying its `reviews`.
+- Cleaned the two test items out of Postgres afterward so the seeded admin is back to 0 items.
+
+**New concepts introduced**
+- **Blob**: an in-memory bag of bytes with a MIME type (here `application/json`). It's how the browser represents "a file's worth of data" that didn't come from disk.
+- **Object URL** (`URL.createObjectURL` / `revokeObjectURL`): a short-lived `blob:` URL pointing at that in-memory Blob so an `<a>` or `<img>` can reference it. You `revoke` it when done to free the memory — otherwise it lives until the page unloads.
+- **The `download` attribute**: on an `<a>`, it tells the browser "save the target instead of navigating to it," and its value becomes the suggested filename.
+- **Why a JSON export needs no `Content-Disposition`**: that header is how a *server* tells the browser "treat my response as a download." Since our server returns plain JSON for the app to use, the client decides to save it instead — so the header isn't needed here.
+
+**You should be able to explain**
+1. `GET /export` returns JSON, yet we call it "download my items." Where does the actual *file* get created — on the server or in the browser — and which few lines do it?
+2. Why could we reuse the same `request()` helper for export when the task warned that file downloads "likely need a different path"? What about *this* endpoint makes the ordinary helper fine?
+3. The backend validates `includeDeleted` with `z.enum(['true','false'])` rather than `z.coerce.boolean()`. What bug does that avoid, and what must the client therefore send in the query string?
