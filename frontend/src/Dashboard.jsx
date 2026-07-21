@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createItem, getDueItems, listItems, reviewItem, skipItem } from './api';
+import ItemDetail from './ItemDetail';
 
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
 
@@ -14,6 +15,7 @@ export default function Dashboard({ token, onLogout }) {
   const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [selectedId, setSelectedId] = useState(null);
   const limit = 20;
 
   async function refreshDueItems() {
@@ -78,6 +80,17 @@ export default function Dashboard({ token, onLogout }) {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  if (selectedId) {
+    return (
+      <ItemDetail
+        token={token}
+        itemId={selectedId}
+        onBack={() => setSelectedId(null)}
+        onChanged={refreshAllItems}
+      />
+    );
+  }
 
   return (
     <div>
@@ -163,7 +176,19 @@ export default function Dashboard({ token, onLogout }) {
           ) : (
             <ul className="due-list">
               {allItems.map((item) => (
-                <li key={item.id}>
+                <li
+                  key={item.id}
+                  className="clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedId(item.id);
+                    }
+                  }}
+                >
                   <div>
                     <p>{item.preview}</p>
                     <span className="stage-label">

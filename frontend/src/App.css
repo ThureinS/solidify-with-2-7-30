@@ -32,7 +32,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   padding: 0.75rem 1rem;
   font-size: 1rem;
   font-family: inherit;
@@ -42,8 +43,14 @@ select {
   border-radius: var(--radius-md);
 }
 
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
@@ -91,6 +98,17 @@ button.secondary {
 
 button.secondary:hover:not(:disabled) {
   background: var(--color-bg);
+}
+
+button.danger {
+  background: var(--color-surface);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--color-error);
+  color: var(--color-accent-contrast);
 }
 
 .error {
@@ -202,4 +220,26 @@ button.secondary:hover:not(:disabled) {
 
 .pagination button:hover:not(:disabled) {
   background: var(--color-bg);
+}
+
+.due-list li.clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.due-list li.clickable:hover,
+.due-list li.clickable:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.item-text {
+  white-space: pre-wrap;
+  margin: 1rem 0 0.5rem;
+}
+
+.detail-subhead {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
 }

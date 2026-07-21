@@ -269,3 +269,33 @@ Started from a gap analysis: comparing every backend endpoint against what the f
 1. What does the `status` query param on `GET /items` do, and what's the difference between `active`, `archived`, and `all`?
 2. Why does changing one line (`--color-accent`) in `index.css` update the Add Item button, the active tab underline, and the Review button all at once?
 3. Why did styling the active/inactive tabs need `.tabs button.secondary` as a selector instead of adding an `.active` class in the JSX — what does that say about how the two tab buttons are actually rendered?
+
+## 2026-07-21 — Bonus: item detail, edit, and soft-delete
+
+This turned the "All items" list from read-only into something you can actually manage. It wires three backend endpoints that had no UI: `GET /items/:id` (detail), `PATCH /items/:id` (edit text), and `DELETE /items/:id` (soft delete). That takes the frontend from 8 of 14 endpoints to 11 of 14 — remaining gaps: the admin panel and export.
+
+**What was built**
+- **`api.js`** got three new functions: `getItem`, `updateItem`, `deleteItem`. All three ride the existing generic `request()` helper — because that helper already returns `null` on a `204 No Content` response, `deleteItem` needed no special-casing at all.
+- **`ItemDetail.jsx`** (new component, following the existing one-file-per-screen pattern of `AuthForm` / `Dashboard`): loads a single item, shows its full text + status line (stage, date added, next review) + review history, and has inline **Edit** (a textarea that saves via PATCH) and **Delete** buttons plus a **Back** link.
+- **`Dashboard.jsx`**: the "All items" rows are now clickable — clicking one sets a `selectedId` state, and while that's set the dashboard renders `<ItemDetail>` instead of the list. After an edit or delete, the list re-fetches so previews stay fresh.
+- **`App.css`**: a handful of additions, all reusing the existing design tokens — a clickable-row hover cue, a `textarea` style, and a `button.danger` variant (terracotta's cousin: uses `--color-error`).
+
+**Key decisions and why**
+- **Detail view is a full-screen swap, not a modal.** When `selectedId` is set, `Dashboard` early-returns `<ItemDetail>` and the list/header disappear. A modal overlay would have meant managing focus traps and backdrop clicks — more machinery than a bonus screen needs. The detail view has its own Back button, so nothing is lost.
+- **`window.confirm` for the delete confirmation** (this was your call to make). Delete is destructive from the user's point of view, so a bare click is dangerous — one misclick wipes a card. `window.confirm` prevents that with zero extra state or markup. The trade-off is it's a plain browser dialog, not on-brand; the noted upgrade path is an inline two-step "click again to confirm" button if that ever matters.
+- **Editing text does NOT touch the schedule.** The backend's `updateItemText` only changes the text field — stage and next-review date stay put. Verified this in the DB after an edit: text changed, `nextReviewDate` unchanged. Editing a typo shouldn't reset your review timing.
+- **Clickable `<li>` rows are keyboard-accessible.** A `<li>` isn't a button, so mouse-only `onClick` would strand keyboard users. Added `role="button"`, `tabIndex={0}`, and an `onKeyDown` that fires on Enter/Space — the accessibility basics that make a non-button element behave like one.
+
+**Problems hit and how they were solved**
+- **Docker Desktop was closed again**, so local Postgres was down. Started it (`open -a Docker`, waited for the daemon), then `docker compose up -d` and `prisma migrate deploy` before the backend would connect.
+- **Verifying "soft" delete, not just "gone."** The UI hides deleted items even under the "All" filter, so the list disappearing isn't proof the row survived. Confirmed by querying Postgres directly: the deleted item's row is still there with `deletedAt` set (`deleted = t`) and its edited text intact — a real soft delete, recoverable via export's `includeDeleted`.
+
+**New concepts introduced**
+- **Soft delete**: instead of removing a row, you stamp a `deletedAt` timestamp and filter those rows out of normal queries. The data survives (auditable, restorable); it just stops showing up. The opposite is a "hard delete" (`DELETE FROM ...`), which is irreversible.
+- **`204 No Content`**: an HTTP status meaning "success, and there's no body to send back." Delete endpoints use it because there's nothing meaningful to return. The frontend's `request()` helper checks for 204 and resolves to `null` instead of trying to parse an empty body as JSON (which would throw).
+- **Accessible name / `role`**: assistive tech decides what an element *is* from its `role` and how to announce it from its accessible name. Giving a `<li>` `role="button"` + keyboard handling makes it announce and behave as a button despite not being one.
+
+**You should be able to explain**
+1. When you delete an item, the row vanishes from every filter in the UI — so how do we actually know it was a *soft* delete and not permanently destroyed?
+2. Why did `deleteItem` in `api.js` need no special code to handle the server's response, when `getItem` and `updateItem` both return JSON?
+3. Clicking an "All items" row opens the detail view — what one piece of state in `Dashboard.jsx` makes that happen, and what makes the row work for someone navigating by keyboard instead of mouse?

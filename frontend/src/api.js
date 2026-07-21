@@ -49,6 +49,23 @@ export function listItems(token, { status = 'active', page = 1 } = {}) {
   return request(`/items?status=${status}&page=${page}`, { token });
 }
 
+export function getItem(token, itemId) {
+  return request(`/items/${itemId}`, { token });
+}
+
+export function updateItem(token, itemId, text) {
+  return request(`/items/${itemId}`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ text }),
+  });
+}
+
+// Soft delete on the backend; returns 204 -> request() resolves to null.
+export function deleteItem(token, itemId) {
+  return request(`/items/${itemId}`, { token, method: 'DELETE' });
+}
+
 export function reviewItem(token, itemId) {
   return request(`/items/${itemId}/review`, {
     token,
