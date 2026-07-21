@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createItem, getDueItems, listItems, reviewItem, skipItem } from './api';
 import ItemDetail from './ItemDetail';
+import AdminPanel from './AdminPanel';
+import Pagination from './Pagination';
 
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
 
-export default function Dashboard({ token, onLogout }) {
-  const [view, setView] = useState('due'); // 'due' | 'all'
+export default function Dashboard({ token, user, onLogout }) {
+  const [view, setView] = useState('due'); // 'due' | 'all' | 'admin'
   const [dueItems, setDueItems] = useState([]);
   const [newText, setNewText] = useState('');
   const [error, setError] = useState('');
@@ -79,8 +81,6 @@ export default function Dashboard({ token, onLogout }) {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-
   if (selectedId) {
     return (
       <ItemDetail
@@ -95,7 +95,7 @@ export default function Dashboard({ token, onLogout }) {
   return (
     <div>
       <header className="dashboard-header">
-        <h1>{view === 'due' ? 'Due today' : 'All items'}</h1>
+        <h1>{view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}</h1>
         <button type="button" className="link" onClick={onLogout}>
           Log out
         </button>
@@ -116,20 +116,33 @@ export default function Dashboard({ token, onLogout }) {
         >
           All items
         </button>
+        {user?.role === 'ADMIN' && (
+          <button
+            type="button"
+            className={view === 'admin' ? '' : 'secondary'}
+            onClick={() => setView('admin')}
+          >
+            Admin
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleAddItem} className="add-item-form">
-        <input
-          type="text"
-          placeholder="What did you learn?"
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-          required
-        />
-        <button type="submit">Add item</button>
-      </form>
-      {addedMessage && <p className="success">{addedMessage}</p>}
-      {error && <p className="error">{error}</p>}
+      {view !== 'admin' && (
+        <>
+          <form onSubmit={handleAddItem} className="add-item-form">
+            <input
+              type="text"
+              placeholder="What did you learn?"
+              value={newText}
+              onChange={(e) => setNewText(e.target.value)}
+              required
+            />
+            <button type="submit">Add item</button>
+          </form>
+          {addedMessage && <p className="success">{addedMessage}</p>}
+          {error && <p className="error">{error}</p>}
+        </>
+      )}
 
       {view === 'due' ? (
         dueItems.length === 0 ? (
@@ -154,7 +167,7 @@ export default function Dashboard({ token, onLogout }) {
             ))}
           </ul>
         )
-      ) : (
+      ) : view === 'all' ? (
         <>
           <label className="status-filter">
             Status
@@ -201,22 +214,16 @@ export default function Dashboard({ token, onLogout }) {
             </ul>
           )}
 
-          <div className="pagination">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Prev
-            </button>
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            total={total}
+            limit={limit}
+            onPrev={() => setPage(page - 1)}
+            onNext={() => setPage(page + 1)}
+          />
         </>
+      ) : (
+        <AdminPanel token={token} currentUserId={user.id} />
       )}
     </div>
   );

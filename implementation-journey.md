@@ -299,3 +299,39 @@ This turned the "All items" list from read-only into something you can actually 
 1. When you delete an item, the row vanishes from every filter in the UI — so how do we actually know it was a *soft* delete and not permanently destroyed?
 2. Why did `deleteItem` in `api.js` need no special code to handle the server's response, when `getItem` and `updateItem` both return JSON?
 3. Clicking an "All items" row opens the detail view — what one piece of state in `Dashboard.jsx` makes that happen, and what makes the row work for someone navigating by keyboard instead of mouse?
+
+## 2026-07-21 — Bonus: admin panel (users list + suspend/unsuspend) + /auth/me
+
+Wired the admin surface into the frontend: an ADMIN-only tab listing all users with per-row Suspend/Unsuspend, plus the previously-unused `GET /auth/me`. This takes the frontend to 13 of 14 endpoints — **only `GET /export` remains**. We ran this slice through the full **feature-dev process** (a structured 7-phase workflow: discovery → codebase exploration → clarifying questions → architecture design → implementation → quality review → summary), using subagents to explore the code, propose architectures, and review the result. That's heavier than the last slice on purpose — it's the process itself we were practicing.
+
+**What was built**
+- **`api.js`**: `getMe`, `listUsers`, `suspendUser`, `unsuspendUser` (the last two POST and return 204 → `null`, like `deleteItem`). Also: the shared `request()` helper now attaches `err.status` to the error it throws, so callers can tell an auth failure (401/403) from a server blip.
+- **`App.jsx`**: fetches `GET /auth/me` in a `useEffect` keyed on `[token]` (covers both first load and just-after-login with one effect), stores the `user`, and passes it down. This is how the client learns its own role and id.
+- **`Dashboard.jsx`**: an "Admin" tab that renders only when `user?.role === 'ADMIN'`; a third `view` value (`'admin'`); the add-item form is hidden in the admin view.
+- **`AdminPanel.jsx`** (new screen): paginated users list, each row showing email + `role · Active/Suspended · joined date`, with a Suspend (danger) or Unsuspend (secondary) button — **hidden on your own row** because the backend forbids self-suspend.
+- **`Pagination.jsx`** (new): the Prev/"Page X of Y"/Next block, extracted from Dashboard and now shared by both the items list and the users list.
+- **No new CSS, no new dependencies** — every style reused from the existing tokens/classes.
+
+**Key decisions and why**
+- **Client role-checks are cosmetic; the server is the real gate.** Hiding the Admin tab from non-admins is a convenience only — a non-admin who calls `/admin/*` directly still gets a 403 from the `requireAdmin` middleware. We stated this plainly in the code so it isn't mistaken for actual access control.
+- **Fetch `/auth/me` instead of decoding the JWT client-side.** The token *does* contain the role, but `/auth/me` reflects live server state (a mid-session suspension shows up), gives a natural place to react to an expired token, and avoids a second source of truth. Cost: one extra request and a brief "role unknown" window (handled by `user` starting `null`, so the tab just appears a beat later).
+- **Extracted `<Pagination>` but nothing else.** Two identical call sites is the "rule of two" — real duplication worth removing. We deliberately did *not* build a `usePaginatedList` hook or an auth Context (both would be premature at two call sites / two prop-drill hops); all three architecture agents independently agreed.
+- **No confirm on Suspend.** Unlike item Delete (a one-way soft delete, which uses `window.confirm`), suspend is reversible via Unsuspend, so a confirm dialog would be friction for no safety gain.
+- **Logout only on 401/403, not on any error.** Our first version logged out on *any* `/auth/me` failure — which would kick a user with a valid token out on a transient 500 or a dropped connection. Fixed to log out only when the status is 401/403 (session genuinely over) and otherwise keep the token.
+
+**Problems hit and how they were solved**
+- **Two edge-case bugs the happy-path test missed**, both found by a code-review agent after the feature visibly "worked":
+  1. *Transient failure logged you out.* The `request()` helper threw a status-less `Error`, so `App.jsx` couldn't tell "token expired" from "server blip" and logged out on both. Fixed by attaching `err.status` and branching on 401/403.
+  2. *Stale-response race.* On a fast logout→login, a slow `getMe` for the old token could resolve last and overwrite `user` with the previous person's data (a phantom Admin tab). Fixed with the standard effect-cleanup guard: a `let cancelled = false` flag flipped in the effect's cleanup function, checked before calling `setUser`.
+- **Verifying suspend was real, not just a UI flip.** Confirmed the round-trip (Suspend → Unsuspend) against Postgres directly: `isSuspended` went `f → t → f`. Also verified the auto-logout branch by corrupting the stored token to force a 401 → the app dropped to the login screen and cleared the token.
+
+**New concepts introduced**
+- **`useEffect` cleanup for out-of-order async**: an effect can return a function that React runs before the next effect (or on unmount). Setting a `cancelled` flag there and checking it before applying an async result is the standard way to ignore a stale response when the input changed mid-flight.
+- **Attaching data to an `Error`**: JS errors are plain objects, so you can set `err.status = ...` before throwing. Callers then branch on it — cleaner than string-matching the message.
+- **Cosmetic gate vs. real authorization**: hiding UI by role improves UX but is not security. Authorization must be enforced server-side; the client check is only there so users don't see buttons they can't use.
+- **JWT expiry with no refresh token**: the 7-day token, once expired, has no silent renewal path by design — the user simply logs in again to mint a fresh one.
+
+**You should be able to explain**
+1. Why is hiding the Admin tab from non-admins *not* a security measure, and where does the actual access control live?
+2. We chose to fetch `/auth/me` rather than read the role out of the JWT the client already has. Give one concrete reason that's better.
+3. Our first `/auth/me` code logged the user out on *any* failure. Why was that wrong, and what does the fixed version check before logging out?

@@ -20,7 +20,9 @@ async function request(path, { token, ...options } = {}) {
   const data = res.status === 204 ? null : await res.json();
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || `Request failed (${res.status})`);
+    const err = new Error(data?.error?.message || `Request failed (${res.status})`);
+    err.status = res.status; // so callers can tell 401/403 from a 5xx/network blip
+    throw err;
   }
   return data;
 }
@@ -80,4 +82,25 @@ export function skipItem(token, itemId) {
     method: 'POST',
     body: JSON.stringify({ date: todayLocal() }),
   });
+}
+
+// --- Current user + admin ---
+
+// How the client learns its own role/id. Same user shape as the admin list.
+export function getMe(token) {
+  return request('/auth/me', { token });
+}
+
+// limit is omitted -- the backend defaults to 20, matching listItems.
+export function listUsers(token, { page = 1 } = {}) {
+  return request(`/admin/users?page=${page}`, { token });
+}
+
+// suspend/unsuspend return 204 -> request() resolves to null, like deleteItem.
+export function suspendUser(token, userId) {
+  return request(`/admin/users/${userId}/suspend`, { token, method: 'POST' });
+}
+
+export function unsuspendUser(token, userId) {
+  return request(`/admin/users/${userId}/unsuspend`, { token, method: 'POST' });
 }
