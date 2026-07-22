@@ -375,3 +375,43 @@ Wired the last unused backend endpoint, `GET /export`, into the UI: an **Include
 1. `GET /export` returns JSON, yet we call it "download my items." Where does the actual *file* get created — on the server or in the browser — and which few lines do it?
 2. Why could we reuse the same `request()` helper for export when the task warned that file downloads "likely need a different path"? What about *this* endpoint makes the ordinary helper fine?
 3. The backend validates `includeDeleted` with `z.enum(['true','false'])` rather than `z.coerce.boolean()`. What bug does that avoid, and what must the client therefore send in the query string?
+
+## 2026-07-22 — Backend: Redis in Docker (infrastructure + connectivity proof)
+
+First of the remaining backend tasks. Stood up **Redis** as a Docker service and proved the API can talk to it. Important framing: this slice *only stands up the infrastructure* — nothing uses Redis yet. The actual use (a BullMQ email queue) is the next task; you don't build the queue until the thing it runs on exists. Low-complexity slice, built lean (no subagents).
+
+**What Redis is (one line):** an in-memory key-value store — extremely fast because data lives in RAM, used here as the backing store for a background job queue (and later a refresh-token store).
+
+**What was built**
+- **`docker-compose.yml`**: a `redis:7-alpine` service (port 6379, `redis_data` volume so queued jobs survive a restart later). Alpine = a tiny Linux base image, so the download is small.
+- **`.env` / `.env.example`**: `REDIS_URL="redis://localhost:6379"`, with a note that prod (Vercel) has no Redis and would need a managed one (Upstash).
+- **`src/lib/redis.js`**: an `ioredis` client using the *same global-singleton pattern as `prisma.js`* (one connection, not a fresh one per hot-reload).
+- **`/api/v1/health`**: now `async`, pings Redis and returns `{ status: 'ok', redis: 'up' | 'down' }` — so the connection is demonstrable with a single `curl`.
+
+**Key decisions and why**
+- **`ioredis`, not `node-redis`.** Both are solid Redis clients. Picked ioredis because the next task's queue library, **BullMQ, is built on ioredis** — so one client library serves both instead of two.
+- **An `error` listener on the client is not optional.** ioredis emits an `'error'` event when Redis is unreachable, and a Node EventEmitter with no `'error'` listener *throws* — which would crash the entire API on a Redis blip. The listener logs instead, so the app stays up (it just can't queue jobs until Redis returns). Verified by stopping Redis: the API kept serving.
+- **`enableOfflineQueue: false`.** This was a fix, not a first guess (see below).
+- **Health check as the proof.** Rather than a throwaway script, the connectivity check lives in the existing `/health` endpoint — permanent, and useful for real monitoring later.
+- **Guard against a Redis-less production.** This backend auto-deploys to Vercel on push to `main` (the live URL is `...git-main-...vercel.app`), and prod has no Redis. So if `REDIS_URL` is unset, `src/lib/redis.js` exports `null` instead of a client — otherwise the client would loop reconnect errors against a server that isn't there, and `/health` would show a misleading `redis:"down"`. With the guard, prod reports `redis:"not-configured"` and stays quiet. (Local testing alone can't catch this — it only shows up where the env differs from your machine.)
+
+**Problems hit and how they were solved**
+- **The health check hung when Redis was down.** First version pinged Redis with ioredis's defaults; with Redis stopped, `curl /health` didn't return `redis: "down"` — it *hung* past 15 s. Cause: ioredis's **offline queue** buffers commands while disconnected and waits for a reconnect, so `ping()` never rejected. A health check that hangs exactly when a dependency is down is useless (that's the moment you're asking it). Fixed with `enableOfflineQueue: false`, which makes commands reject immediately when disconnected. Re-tested: `redis: "down"` now returns in ~15 ms. (The original "waits a beat" code comment was empirically wrong and was corrected.)
+
+**How we verified (end-to-end)**
+- `docker compose up -d` → `docker compose exec redis redis-cli ping` → **PONG**.
+- API up + Redis up → `/health` = `{"status":"ok","redis":"up"}`.
+- **Stopped Redis** → API process stayed alive (didn't crash) and `/health` = `redis:"down"` in ~15 ms.
+- **Restarted Redis** → `/health` = `redis:"up"` again (auto-reconnect).
+
+**New concepts introduced**
+- **Redis**: in-memory key-value store; here, the backend for a job queue.
+- **Health / readiness check**: a lightweight endpoint that reports whether the app and its dependencies are reachable, for load balancers and monitoring. Key rule: it must **fail fast**, never hang.
+- **ioredis offline queue**: by default ioredis buffers commands issued while disconnected and replays them on reconnect. Convenient for app writes; wrong for a health probe — hence `enableOfflineQueue: false`.
+- **Unhandled `'error'` events crash Node**: an EventEmitter (like a Redis client) with no `'error'` listener re-throws the error, taking the process down. Always attach one on long-lived connections.
+- **Alpine image**: a minimal Linux base for containers → smaller images, faster pulls.
+
+**You should be able to explain**
+1. We added Redis but nothing in the app uses it yet — so what does this slice actually accomplish, and why build it before the email queue?
+2. If Redis goes down, why doesn't the whole API crash — what one line prevents that, and what breaks instead?
+3. Our first `/health` hung when Redis was down. Why did it hang, and what setting made it report `"down"` quickly instead?

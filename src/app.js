@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth.routes');
 const itemsRoutes = require('./routes/items.routes');
 const adminRoutes = require('./routes/admin.routes');
 const exportRoutes = require('./routes/export.routes');
+const redis = require('./lib/redis');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const openapiDocument = yaml.load(fs.readFileSync(path.join(__dirname, '../openapi.yaml'), 'utf8'));
@@ -56,8 +57,21 @@ app.use(
 
 app.use(helmet());
 
-app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/v1/health', async (req, res) => {
+  // Ping Redis so this endpoint doubles as proof the connection works.
+  // The client uses enableOfflineQueue:false, so ping() rejects fast when Redis
+  // is down instead of hanging -- the catch below then reports 'down'. When
+  // REDIS_URL is unset (prod has no Redis yet) the client is null -> 'not-configured'.
+  let redisStatus = 'not-configured';
+  if (redis) {
+    redisStatus = 'down';
+    try {
+      if ((await redis.ping()) === 'PONG') redisStatus = 'up';
+    } catch {
+      // leave redisStatus = 'down'
+    }
+  }
+  res.json({ status: 'ok', redis: redisStatus });
 });
 
 app.use('/api/v1/auth', authRoutes);
