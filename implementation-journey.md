@@ -479,3 +479,39 @@ Caught by you while looking at the Due today list: a long item's text got cut of
 **You should be able to explain**
 1. Why doesn't this fix conflict with the spec's "lists show a text preview" line — which endpoint does that line actually apply to?
 2. `toItemDetail` was already built for `GET /items/:id` — why did reusing it for `/items/due` require no changes to the mapper itself?
+
+## 2026-07-22 — Fix: prod database was never seeded (demo/admin couldn't log in live)
+
+Caught when trying to demo the deployed app: `demo@example.com` / `admin@example.com` returned "Invalid email or password" on the live Vercel URL, even though they work fine locally.
+
+**Root cause:** back in Part 7, the deploy deliberately ran only `prisma migrate deploy` against the production Neon database (creates the table structure), never `npm run seed` (creates the fake demo/admin accounts + sample items) — seeding real fake data into a "real" production database wasn't something we wanted to do by default. That was the right call at the time, but it means the live site has always had an empty `users` table.
+
+**Fix:** ran `npm run seed` once, pointed at the Neon production connection string instead of local Docker Postgres — `DATABASE_URL="<prod-url>" node --env-file=.env prisma/seed.js`. Since a shell-set env var takes precedence over `--env-file`'s values (verified this experimentally first, rather than assuming), everything else (`PORT`, `JWT_SECRET`, etc.) still loaded from local `.env` as normal — only `DATABASE_URL` pointed at prod for this one command. `seed.js` uses `prisma.user.upsert` with `update: {}`, so it's safe to run more than once: it only *creates* the two accounts if they don't already exist, never overwrites anything.
+- **You ran the actual command yourself, in your own terminal, outside this chat** — specifically to avoid pasting a production database password into the conversation again (see the still-unresolved Neon password exposure from 2026-07-18). I only verified the *result* afterward with `curl` against the live login endpoint, which needs no password.
+
+**Verified:** `curl`'d `/auth/login` on the live backend for both accounts → `200` + a real JWT, for both `demo@example.com`/`Demo1234` and `admin@example.com`/`Admin1234`.
+
+**New concepts introduced**
+- **Environment parity gap**: when your local dev environment and production don't actually contain the same data (or even the same *kind* of setup), a feature that "works" locally can still be broken live — the code was never the problem here, the data was.
+- **`upsert` as a safe "run this again" guard**: `update: {}` means "if it already exists, touch nothing" — this is what makes a seed script safe to run against a database you're not sure is already seeded, without a separate "check first" step.
+
+**You should be able to explain**
+1. Why did the exact same login code work locally but fail on the live URL — what was actually different between the two databases?
+2. In the command `DATABASE_URL="<prod-url>" node --env-file=.env prisma/seed.js`, which value wins for `DATABASE_URL` — the one in the shell, or the one in `.env` — and why does that matter here?
+
+## 2026-07-22 — Email queue: real end-to-end verification (Gmail App Password)
+
+Closes out the BullMQ email-queue task from earlier this session. `GMAIL_USER`/`GMAIL_APP_PASSWORD` are now genuinely saved in `.env` (took a couple of tries — the file wasn't actually being saved at first, caught by checking its last-modified timestamp rather than trusting "I added it").
+
+**What was done:**
+- `docker compose up -d --force-recreate worker` — a plain `restart` wasn't enough; Docker only reads `env_file` values when a container is *created*, not on every restart, so the worker needed to be fully recreated to pick up the newly-saved Gmail credentials.
+- Registered a fresh throwaway account through the running frontend, using a real inbox, and confirmed the welcome email actually arrived.
+- Along the way, incidentally proved the offline-queue design decision from earlier actually works: a leftover test job from the Redis-down resilience test (queued while Redis was stopped, then flushed automatically once Redis came back — ioredis's offline queue buffering, not dropping, the command) had failed twice against the old empty credentials, got picked back up as a "stalled" job when the worker container was recreated, and succeeded on its final retry attempt with the real credentials. Retries + backoff + stalled-job recovery, all doing exactly what they're supposed to, unprompted.
+- Cleaned up the throwaway test accounts (`queuetest1@example.com`, `queuetest2@example.com`, `gmail-e2e-test@example.com`) from the local database afterward — confirmed no orphaned items/reviews were left behind.
+
+**New concepts introduced**
+- **Stalled job recovery**: if a BullMQ worker holding a job dies or disappears (crash, container restart) without marking the job finished, BullMQ eventually notices the lock went stale and hands the job to whichever worker is listening next, for another attempt — this is what let the leftover test job get a fresh try instead of being stuck forever.
+
+**You should be able to explain**
+1. Why did `docker compose restart worker` (used earlier, mid-session) not pick up the new Gmail credentials, but `--force-recreate` did?
+2. The `queuetest2` job had already failed twice with the old empty credentials — why did it get a third attempt instead of just staying failed?
