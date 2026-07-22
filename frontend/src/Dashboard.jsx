@@ -19,6 +19,7 @@ export default function Dashboard({ token, user, onLogout }) {
   const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const limit = 20;
 
   async function refreshDueItems() {
@@ -86,6 +87,7 @@ export default function Dashboard({ token, user, onLogout }) {
   // The Blob + temporary <a> is the standard client-side "save this data"
   // pattern -- the server just returns JSON, the browser does the saving.
   async function handleExport() {
+    setExporting(true); // disable the button so a slow fetch can't be double-clicked into two downloads
     try {
       const data = await exportData(token, includeDeleted);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -98,6 +100,8 @@ export default function Dashboard({ token, user, onLogout }) {
       setError('');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -214,8 +218,8 @@ export default function Dashboard({ token, user, onLogout }) {
                 />
                 Include deleted
               </label>
-              <button type="button" className="secondary" onClick={handleExport}>
-                Download my items
+              <button type="button" className="secondary" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : 'Download my items'}
               </button>
             </div>
           </div>
