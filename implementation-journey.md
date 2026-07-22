@@ -515,3 +515,23 @@ Closes out the BullMQ email-queue task from earlier this session. `GMAIL_USER`/`
 **You should be able to explain**
 1. Why did `docker compose restart worker` (used earlier, mid-session) not pick up the new Gmail credentials, but `--force-recreate` did?
 2. The `queuetest2` job had already failed twice with the old empty credentials — why did it get a third attempt instead of just staying failed?
+
+## 2026-07-22 — Bonus: "Due today" rows are now clickable too
+
+You noticed that after the earlier fix (full text instead of preview), "Due today" still had no way to see an item's dates or review history the way "All items" already could. Fixed by reusing the exact same `ItemDetail` component for both lists — no new screen needed.
+
+**What was built**
+- `frontend/src/Dashboard.jsx`: the due-list `<li>` now has the same clickable/keyboard-accessible pattern "All items" already had (`role="button"`, `tabIndex`, click + Enter/Space handling), opening the same `<ItemDetail>`.
+- One real wrinkle "All items" never had to deal with: due-list rows contain **Review/Skip buttons inside the clickable row**, so a click on those buttons must NOT also open the detail view. Fixed with `e.target.closest('button')` — if the click (or Enter/Space keypress) originated inside any button, the row's own click handler does nothing and lets the button's own handler run instead.
+- `onChanged` (called when `ItemDetail` edits or deletes something) now refreshes whichever list you actually came from — `refreshDueItems` if you opened the detail from "Due today", `refreshAllItems` otherwise — instead of always refreshing "All items" regardless of where you were.
+
+**Key decisions and why**
+- **No new component.** `ItemDetail` already showed everything asked for (full text, dates, review history, edit, delete) — it just wasn't reachable from the due list. Reusing it is the same "rule of two" reasoning from the admin-panel slice: one component, two entry points, not a fork.
+- **Review/Skip stayed out of the detail view.** You can still only Review/Skip from the list row, not from inside the detail screen — noted as the deliberate scope cut here; if that friction turns out to matter in practice, adding those two buttons to `ItemDetail` is a small follow-up, not a redesign.
+
+**Problems hit and how they were solved**
+- **Testing this polluted the seeded demo data** — clicking "Skip" during verification pushed the seeded "overdue" item's `nextReviewDate` forward by a day, which would've made the next demo look wrong. Fixed by simply re-running `npm run seed` (safe and idempotent for the demo user specifically — it wipes and recreates *only* that user's items every time), restoring the clean due/overdue/archived spread.
+
+**You should be able to explain**
+1. A click on the "Skip" button is physically *inside* the clickable `<li>` — so why doesn't clicking Skip also open the detail view?
+2. Why does `onChanged` need to know whether you came from "Due today" or "All items," instead of just always refreshing one specific list?

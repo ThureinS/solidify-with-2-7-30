@@ -111,7 +111,7 @@ export default function Dashboard({ token, user, onLogout }) {
         token={token}
         itemId={selectedId}
         onBack={() => setSelectedId(null)}
-        onChanged={refreshAllItems}
+        onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
       />
     );
   }
@@ -174,7 +174,21 @@ export default function Dashboard({ token, user, onLogout }) {
         ) : (
           <ul className="due-list">
             {dueItems.map((item) => (
-              <li key={item.id}>
+              <li
+                key={item.id}
+                className="clickable"
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  if (!e.target.closest('button')) setSelectedId(item.id);
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button')) {
+                    e.preventDefault();
+                    setSelectedId(item.id);
+                  }
+                }}
+              >
                 <div>
                   <p>{item.text}</p>
                   <span className="stage-label">{STAGE_LABELS[item.stage]}</span>
