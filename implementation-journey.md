@@ -552,3 +552,25 @@ Caught live: you had the app open while I was resetting demo data in the backgro
 **You should be able to explain**
 1. Both effects fetch data for their respective tab — why did only one of them ever run more than once, and what specific piece of code caused that difference?
 2. If you Review or Skip an item directly (the buttons already call `refreshDueItems()` themselves), why did this bug not show up in *that* flow — only when switching tabs?
+
+## 2026-07-22 — Docs: fixed stale claims, added user manual + developer handover, set a docs policy
+
+Closing out a long session with documentation work: two existing docs had drifted out of sync with what's actually built, and two new docs were added.
+
+**What was built**
+- **Fixed two stale docs**: root `README.md` never mentioned Redis, the Docker worker, or the `GMAIL_USER`/`GMAIL_APP_PASSWORD` setup — someone following it today couldn't get the email queue running. `frontend/README.md` still said editing/export/admin were "backend-only for now," even though the frontend has wired all 14 endpoints for several sessions now. `submission-requirements.md`'s trade-offs section still listed the frontend UI as "backlogged" — corrected, with a pointer to this journal.
+- **New `user-manual.md`**: plain-language, no-technical-background guide for someone just *using* the deployed app — what 2-7-30 means in practice, adding items, the due-today workflow, review vs. skip, editing/deleting, exporting, admin features, and an FAQ.
+- **New `developer-handover.md`**: an architecture snapshot for someone picking up the codebase cold — stack table with one-line "why," a repo-layout map, the data model, the scheduling logic's pure-function design (with the "one rule, two guarantees" due-check explained), the email queue's producer/consumer split and its Docker rationale, timezone/date handling, auth/security notes, and a section explicitly mapping out how every doc in this repo relates to the others.
+- Both new docs linked from the top of `README.md` so they're actually discoverable.
+
+**Key decisions and why**
+- **A policy on how the "plan docs" get treated going forward**, decided by asking directly rather than guessing: `submission-requirements.md`/`build-plan.md` stay **frozen** as the original graded scope and build order — new bonus features don't get new sections added there. Only outright factual errors get fixed (like the stale frontend-UI backlog claim). `implementation-journey.md` remains the one living record of everything built, bonus included. Reasoning: blurring "what was originally assigned" into "everything we've since added" would make it impossible to later tell the two apart.
+- **`README.md`/`frontend/README.md` are NOT covered by that freeze** — those are regular setup docs meant to reflect current reality, so keeping them accurate is just normal maintenance, not scope creep.
+- **Grounded every factual claim in the new docs against the actual code** before writing, rather than working from memory of what was built — checked `package.json` scripts, `.env.example`, the live endpoint table, the Prisma schema, and `schedule.service.js`'s actual exports. This was a direct reaction to having *just* hit two staleness bugs in the existing docs — worth the extra minute of grepping to not immediately introduce a third.
+
+**New concepts introduced**
+- **Documentation drift**: docs don't automatically stay accurate as code changes — every fact in a written doc is a claim that was true *at the time it was written*, and nothing enforces that it stays true. The fix isn't "write more docs," it's periodically checking existing claims against current code, the same way you'd distrust a memory or assumption.
+
+**You should be able to explain**
+1. What's the actual difference in how `submission-requirements.md` and `README.md` are meant to be maintained going forward, and why does that split make sense?
+2. Both README files had gone stale in different ways — what's one concrete way to *notice* a doc has gone stale, rather than just trusting it because it was written by someone (or something) careful?
