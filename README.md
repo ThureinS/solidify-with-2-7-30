@@ -12,6 +12,10 @@ Built as a learning project (course: "AI agent co-pilot backend Express").
 The full step-by-step story — what was built, why, and what went wrong along
 the way — is in [`implementation-journey.md`](./implementation-journey.md).
 
+**Just using the app?** See [`user-manual.md`](./user-manual.md).
+**Picking up the codebase?** See [`developer-handover.md`](./developer-handover.md)
+for the architecture overview, data model, and current-state summary.
+
 **Live API:** https://solidify-with-2-7-30-git-main-thureinss-projects.vercel.app
 (Swagger docs at `/api/v1/docs`)
 
