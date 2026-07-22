@@ -2,12 +2,23 @@ const bcrypt = require('bcrypt');
 const prisma = require('../lib/prisma');
 const { AppError } = require('../middleware/errorHandler');
 const { signToken } = require('../lib/jwt');
+const emailQueue = require('../lib/emailQueue');
 
 const SALT_ROUNDS = 10;
 
 async function registerUser({ email, password }) {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  return prisma.user.create({ data: { email, passwordHash } });
+  const user = await prisma.user.create({ data: { email, passwordHash } });
+
+  // Fire-and-forget: never awaited inline, so a queue/Redis failure can't
+  // turn a successful signup into a 500.
+  if (emailQueue) {
+    emailQueue
+      .add('welcome', { userId: user.id, email: user.email })
+      .catch((err) => console.error('enqueue welcome failed:', err.message));
+  }
+
+  return user;
 }
 
 async function loginUser({ email, password }) {

@@ -19,6 +19,17 @@ services:
     volumes:
       - redis_data:/data
 
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # .env's REDIS_URL points at localhost, which is wrong inside the
+      # compose network -- override it to the service name.
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
 volumes:
   db_data:
   redis_data:
