@@ -535,3 +535,20 @@ You noticed that after the earlier fix (full text instead of preview), "Due toda
 **You should be able to explain**
 1. A click on the "Skip" button is physically *inside* the clickable `<li>` — so why doesn't clicking Skip also open the detail view?
 2. Why does `onChanged` need to know whether you came from "Due today" or "All items," instead of just always refreshing one specific list?
+
+## 2026-07-22 — Bug fix: "Due today" never refreshed after the first page load
+
+Caught live: you had the app open while I was resetting demo data in the background (`npm run seed`, cleaning up my own test residue). Your "All items" tab correctly showed the fresh data (4 due items, one of them a stale-looking "2-day review" row) — but "Due today" still showed only 2, and clicking an "All items" row that pointed at data from *before* the reset 404'd.
+
+**Root cause:** two very similar-looking `useEffect`s in `Dashboard.jsx`, with one meaningful difference. "All items"'s effect depends on `[view, statusFilter, page]` — so switching to that tab (which changes `view`) always triggers a fresh fetch. "Due today"'s effect had an empty dependency array `[]` — meaning it only ever ran once, the very first time the component mounted, and never again for the rest of the browser session, no matter how many times you switched away and back to that tab.
+
+**Fix (one line, `frontend/src/Dashboard.jsx`):** changed the due-items effect from `useEffect(() => { refreshDueItems(); }, [])` to `useEffect(() => { if (view === 'due') refreshDueItems(); }, [view])` — the exact same pattern "All items" already used. Now switching to "Due today" refetches every time, same as every other tab.
+
+**Verified:** reloaded fresh (4 due items, matching a direct API call) → switched to "All items" → reviewed one of the due items via `curl` (simulating "something changed while you were on a different tab") → switched back to "Due today" → the reviewed item correctly disappeared without a full page reload. Before the fix, it would have stayed visible until you refreshed the whole page.
+
+**New concepts introduced**
+- **Stale UI state**: React only re-renders with new data when something tells it to fetch again (an effect firing, a state update) — it never magically notices the *server's* data changed on its own. A tab that "looks fine" can silently be showing a snapshot from minutes (or a full backend reset) ago if nothing re-triggers its fetch.
+
+**You should be able to explain**
+1. Both effects fetch data for their respective tab — why did only one of them ever run more than once, and what specific piece of code caused that difference?
+2. If you Review or Skip an item directly (the buttons already call `refreshDueItems()` themselves), why did this bug not show up in *that* flow — only when switching tabs?

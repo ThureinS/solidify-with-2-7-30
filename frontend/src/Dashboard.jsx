@@ -43,9 +43,9 @@ export default function Dashboard({ token, user, onLogout }) {
   }
 
   useEffect(() => {
-    refreshDueItems();
+    if (view === 'due') refreshDueItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     if (view === 'all') refreshAllItems();
