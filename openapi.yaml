@@ -248,7 +248,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/ItemSummary' }
+                items: { $ref: '#/components/schemas/ItemDetail' }
 
   /items/{id}:
     parameters:

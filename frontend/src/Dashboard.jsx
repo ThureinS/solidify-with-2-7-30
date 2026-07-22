@@ -176,7 +176,7 @@ export default function Dashboard({ token, user, onLogout }) {
             {dueItems.map((item) => (
               <li key={item.id}>
                 <div>
-                  <p>{item.preview}</p>
+                  <p>{item.text}</p>
                   <span className="stage-label">{STAGE_LABELS[item.stage]}</span>
                 </div>
                 <div className="item-actions">

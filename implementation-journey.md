@@ -461,3 +461,21 @@ The instructor assignment: a background job queue. Scope kept tight to **welcome
 1. Why does `registerUser` call `emailQueue.add(...)` without `await`ing it, and what would go wrong (concretely) if it were awaited and Redis happened to be down at that moment?
 2. `src/lib/emailQueue.js` and `src/lib/redis.js` both open a connection to the same Redis server, but deliberately don't share one connection object. What's the actual difference in configuration, and what would break if they *did* share one?
 3. Why does only `worker.js` get a Dockerfile/container, while the Express API and the React frontend keep running directly on your machine with `nodemon`/`vite`?
+
+## 2026-07-22 — Bug fix: "Due today" showed only an 80-character preview
+
+Caught by you while looking at the Due today list: a long item's text got cut off with no way to see the rest, so you couldn't actually tell what you were being asked to review.
+
+**Root cause:** `GET /items/due` was mapping items through `toItemSummary` — the same mapper used for the *paginated* `GET /items` list, which the spec explicitly says should show "a text preview." But that line in `submission-requirements.md` is about the paginated list specifically; it says nothing about the due queue, and functionally you can't review something you can't read. The due queue was reusing the wrong mapper.
+
+**Fix (3 small edits, no new endpoint):**
+- `src/controllers/items.controller.js`: `listDue` now maps with `toItemDetail` instead of `toItemSummary` — full `text` instead of an 80-character `preview`.
+- `openapi.yaml`: `/items/due`'s response schema now points at `ItemDetail` instead of `ItemSummary`, so the docs match what the endpoint actually returns.
+- `frontend/src/Dashboard.jsx`: the due-list row now renders `item.text` instead of `item.preview`.
+- `frontend/src/App.css`: `.due-list li p` gained `white-space: pre-wrap` (so multi-line notes keep their line breaks instead of collapsing to one line) and the row's `align-items` changed from `center` to `flex-start` (so the Review/Skip buttons sit at the top of a tall paragraph instead of vertically centered against it, which looked odd once rows could be several lines tall).
+
+**Verified:** created a backdated, deliberately long multi-line item via `curl` against the demo account, logged into the frontend as demo, confirmed the full text (all three lines, with line breaks intact) rendered in the Due today list with no truncation and no console errors — then deleted the test item and confirmed all 14 backend tests still pass.
+
+**You should be able to explain**
+1. Why doesn't this fix conflict with the spec's "lists show a text preview" line — which endpoint does that line actually apply to?
+2. `toItemDetail` was already built for `GET /items/:id` — why did reusing it for `/items/due` require no changes to the mapper itself?

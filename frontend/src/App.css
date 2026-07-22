@@ -204,7 +204,7 @@ button.danger:hover:not(:disabled) {
 .due-list li {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -214,6 +214,7 @@ button.danger:hover:not(:disabled) {
 
 .due-list li p {
   margin: 0 0 0.35rem;
+  white-space: pre-wrap;
 }
 
 .stage-label {

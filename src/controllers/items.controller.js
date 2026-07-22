@@ -50,7 +50,7 @@ async function deleteItem(req, res, next) {
 async function listDue(req, res, next) {
   try {
     const items = await itemsService.listDueItems(req.userId, req.validatedQuery.date);
-    res.json(items.map(toItemSummary));
+    res.json(items.map(toItemDetail));
   } catch (err) {
     next(err);
   }
