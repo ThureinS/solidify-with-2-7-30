@@ -23,18 +23,27 @@ Node.js + Express, PostgreSQL via Prisma, JWT auth (bcrypt password
 hashing), Zod validation, Vitest for the scheduling-logic tests, Docker
 Compose for local Postgres, GitHub Actions for CI.
 
-A minimal React (Vite) frontend covering the core loop (register/login, add
-an item, review/skip what's due) lives in [`frontend/`](./frontend) --
-bonus scope beyond the original course spec, kept isolated with its own
-`package.json` and not part of the backend's CI/deploy. See its README for
-how to run it.
+**Bonus: a background email queue** (BullMQ + Redis + nodemailer) sends a
+welcome email when a user registers. The API stays a plain serverless-style
+Express app; the queue's consumer (`worker.js`) is the one piece of this repo
+that runs in its own Docker container (see `Dockerfile`), because a queue
+consumer has to run forever listening for jobs -- something a serverless
+function fundamentally can't do. The API (producer) and worker (consumer)
+never talk to each other directly, only through Redis. See
+`implementation-journey.md` for the full build story.
+
+A React (Vite) frontend covering every one of the 14 backend endpoints
+(auth, items CRUD, due/review/skip, export, admin panel) lives in
+[`frontend/`](./frontend) -- bonus scope beyond the original course spec,
+kept isolated with its own `package.json` and not part of the backend's
+CI/deploy. See its README for how to run it.
 
 ## Running locally
 
 ```bash
 cp .env.example .env          # then set JWT_SECRET to a random string, e.g.:
                                # node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-docker compose up -d          # starts local Postgres
+docker compose up -d          # starts local Postgres, Redis, and the email worker
 npx prisma migrate deploy     # applies the committed migrations
 npm run seed                  # creates demo@example.com / Demo1234 (USER)
                                # and admin@example.com / Admin1234 (ADMIN)
@@ -43,6 +52,24 @@ npm test                      # runs the scheduling unit tests
 ```
 
 API docs (Swagger UI, every endpoint with an example): `GET /api/v1/docs`.
+
+### Email queue (optional)
+
+The welcome-email worker needs a real Gmail account to actually send mail.
+Without it, everything else works exactly the same -- registering still
+succeeds, the app just enqueues no job (see `src/lib/emailQueue.js`'s
+`REDIS_URL`-gated null-guard) or the worker fails to authenticate with Gmail
+(harmless -- BullMQ retries 3x with backoff, then leaves the job in the
+failed set for inspection).
+
+1. Turn on 2-Step Verification on a Gmail account, then create an **App
+   Password** at https://myaccount.google.com/apppasswords
+2. Set `GMAIL_USER` (the Gmail address) and `GMAIL_APP_PASSWORD` (the
+   16-character App Password) in `.env`
+3. `docker compose up -d --force-recreate worker` -- `env_file` values are
+   only read when a container is *created*, so a plain `restart` won't pick
+   up credentials added after the container first started
+4. Register a new account and check `docker compose logs -f worker`
 
 ## Deploying (Neon + Vercel)
 

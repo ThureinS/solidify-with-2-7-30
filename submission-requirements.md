@@ -109,7 +109,8 @@ Environment variables are never committed; .env is gitignored and .env.example d
 
 - The client-supplied "today" date is trusted — a user could only cheat their own schedule (personal tool)
 - No refresh tokens — a 7-day access token is the deliberate simplification
-- No password recovery in MVP (backlogged with email reminders, file upload, tags, statistics, and the frontend UI)
+- No password recovery in MVP (backlogged with email reminders, file upload, tags, and statistics)
+- The frontend UI was originally backlogged too, but was later built as a bonus (all 14 endpoints wired) — see `implementation-journey.md`
 
 ## Success Criteria
 
