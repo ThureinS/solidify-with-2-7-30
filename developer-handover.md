@@ -209,17 +209,89 @@ sending a fake date — fine for a personal tool.
   current (unlike the frozen plan docs).
 - `user-manual.md` — end-user facing guide, no technical content.
 - `openapi.yaml` — the API reference, served live at `/api/v1/docs`.
+- `design/` — static HTML design references (open directly in a browser, no
+  build step). Currently just `review-history-demo.html` — see §10.
 - `CLAUDE.md` — instructions for the AI pair-programming workflow used to
   build this (course context: a beginner + an AI co-pilot). Not relevant to
   running the app, relevant if you're continuing that workflow.
 
-## 10. Running it
+## 10. Planned: frontend redesign (design locked 2026-07-25, not yet built)
+
+A full frontend visual + UX revamp was scoped and design-explored in a
+dedicated session (see `implementation-journey.md`, 2026-07-25 entry, for the
+full back-and-forth). **Design decisions below are final** — implementation
+hasn't started. A static, self-contained reference build of the approved
+design lives at **`design/review-history-demo.html`** — open it directly in a
+browser, no build step, no server needed.
+
+**Direction — "Almanac":** deep indigo (`#1B1F3B`) background, gold accent
+(`#E8C468`), Big Caslon/Didot serif for display type, Optima/Futura for body
+(all with system-font fallbacks — no webfonts loaded). Full light-mode token
+set already worked out in the demo file (`:root[data-mode="light"]` block).
+Two other directions were explored and rejected: a "Lab Notebook" concept
+(dropped — its signature idea needed a memory-retention curve the schema
+can't honestly support, see §"why" below) and a "Trail" forest/orange
+concept (palette liked, but ultimately not chosen over Almanac).
+
+**Stack decisions for the rebuild:**
+- **Tailwind CSS** — replaces the current hand-written CSS custom-properties
+  setup (`frontend/src/App.css`/`index.css`).
+- **`react-router-dom`** — the app currently has *no* routing at all
+  (`frontend/src/App.jsx` swaps `Dashboard`/`AuthForm` via local state).
+  Real routes are needed for the new dedicated history page below.
+- **Gamification stays visual-only** — no new persisted state (no XP/points/
+  achievement tables). The one exception, below, is a small read-only
+  aggregation endpoint — that's a query, not new state.
+
+**New feature: a dedicated "review history" page** (its own route, not part
+of the dashboard):
+- **History grid** — one row per calendar month (not GitHub's week-columns —
+  reads like a calendar, not a generic contribution graph), moon-icon per
+  day, **three honest states**, all derived from `Review.result` with no
+  invented denominator: full moon = reviewed that day with nothing skipped;
+  half moon = mixed (reviewed *and* skipped); new-moon outline = no activity.
+  Skipping is a legitimate, spec-intended action — the UI must not frame
+  "half" as a failure state.
+- **Today's indicator is different on purpose**: a single larger moon (not
+  part of the grid) that fills live through real phases
+  (new→crescent→half→gibbous→full) as a fraction of *today's actual due
+  count* — that ratio is real and queryable right now, unlike any past day.
+- **Rejected for the grid**: shading each day by review *volume* (a 5-level
+  intensity scale, GitHub-heatmap style). Killed for two reasons — (1) shape
+  alone (moon phase) is a weak visual channel for at-a-glance scanning, two
+  adjacent phases look near-identical at small size; (2) there's no stored
+  "how many items were due on this past day" anywhere (`nextReviewDate` only
+  ever holds the *current* value), so a graded "% of due reviewed" for a
+  past day would be fabricated, the same trap as the rejected retention
+  curve.
+
+**Backend work needed to support the history page** (not yet built):
+- One new **read-only** endpoint, e.g. `GET /items/review-history`, grouping
+  `Review` rows by `date` (and by result, to derive the three-state grid).
+  Should accept a `year`/date-range param — default to the current year only,
+  not all-time — so payload size and the number of rendered grid cells stay
+  bounded no matter how many years of history accumulate.
+- **`Review` currently has no index at all** in `prisma/schema.prisma`. The
+  new endpoint has to join `Review → Item` (to filter by `userId`, since
+  `Review` doesn't store it directly) and group by date — add
+  `@@index([itemId, date])` to `Review` as part of that migration, or the
+  join will scan the full table once review rows number in the thousands.
+
+**Playful/gamification ideas discussed, not committed:** a live-filling
+"today" indicator (built into the design above) and a weekly recap
+comparing this week's vs. last week's review count are the two considered
+worth keeping — both computed from existing data, no new state. Rank titles
+and milestone toasts were discussed and explicitly set aside as reading like
+"a game skin bolted onto a study tool" rather than something native to the
+design — revisit only if asked for directly.
+
+## 11. Running it
 
 See `README.md` — it has the actual commands (local run, tests, Docker,
 deploy). Not duplicating them here since that file is the one kept
 guaranteed current.
 
-## 11. Known gaps / backlog (nothing here blocks the app working)
+## 12. Known gaps / backlog (nothing here blocks the app working)
 
 - **Neon prod DB password was exposed in an AI chat session (2026-07-18),
   never rotated.** Do this before treating the prod DB as fully secure.

@@ -574,3 +574,127 @@ Closing out a long session with documentation work: two existing docs had drifte
 **You should be able to explain**
 1. What's the actual difference in how `submission-requirements.md` and `README.md` are meant to be maintained going forward, and why does that split make sense?
 2. Both README files had gone stale in different ways — what's one concrete way to *notice* a doc has gone stale, rather than just trusting it because it was written by someone (or something) careful?
+
+## 2026-07-25 — Frontend redesign: design direction locked (no code changed this session)
+
+A pure design/UX session — no app code touched. The goal was to pick a
+visual direction and a gamification approach for a full frontend revamp,
+before handing the actual build to a new session. Ended with a locked
+design and a static reference file committed to the repo
+(`design/review-history-demo.html`) — see `developer-handover.md` §10 for
+the full spec this session produced.
+
+**What was built**
+- A throwaway comparison artifact (Claude Artifacts, not part of the repo)
+  iterating through three full visual directions — "Lab Notebook" (paper/
+  ink/amber, signature = a per-item memory-retention sparkline), "Almanac"
+  (indigo night sky/gold, signature = a moon-phase review-history tracker),
+  "Trail" (forest green/blaze orange, signature = items-as-waypoints on a
+  path) — before converging on Almanac.
+- The final, approved design saved as a real, self-contained HTML file in
+  the repo at `design/review-history-demo.html` — open it in any browser
+  directly, no dev server needed. It's the actual reference for implementation,
+  not just a description of one.
+
+**Key decisions and why**
+- **Almanac over Trail**, even though both palettes were liked. Almanac
+  spends its "boldness" in exactly one place — gold is the only color doing
+  branding work, indigo just recedes as a considered near-black background.
+  Trail's forest green was itself a present, saturated color, competing with
+  its own orange accent for attention. A muted, more-neutral version of
+  Trail's background was tried and explicitly rejected (screenshot review) —
+  the desaturation killed the richness that made the palette appealing in
+  the first place, so "avoid a green/orange color collision with a future
+  'success' state" got solved by picking a palette without green as the
+  brand hue at all, rather than by muting a green brand hue.
+- **Lab Notebook dropped entirely.** Its signature idea (a visual memory
+  "retention curve" per item) assumed data the schema doesn't have —
+  `Review` only stores `date` + `result` (`REVIEWED`/`SKIPPED`), no
+  difficulty/confidence rating, and the schedule is fixed 2-7-30, not an
+  adaptive algorithm. A retention curve would have been a decorative shape,
+  not something computed. Caught by checking `prisma/schema.prisma` directly
+  instead of assuming the idea was buildable.
+- **Gamification stays visual-only, computed client-side, no new persisted
+  state** — reconfirmed multiple times across the session. The one addition
+  that isn't purely client-side is a small *read* endpoint for review
+  history (see below) — deliberately distinguished from "new state," since
+  it adds a query, not a table or field.
+- **History grid: binary/three-state, not graded intensity.** The first
+  build of the Almanac direction used 5 moon phases to represent *how many*
+  reviews happened each day (a GitHub-heatmap-style volume scale). User
+  feedback ("some full moons in the less part," "just a bunch of tiny dots")
+  correctly identified this as broken — confirmed by an advisor review: the
+  only channel encoding "less → more" was shape geometry (the box-shadow
+  moon-phase trick), and shape alone is a weak visual variable for
+  at-a-glance scanning. Fixed by splitting the job in two: the bulk grid
+  became a simple 3-state read (full/half/new — see below), and the one
+  place a *graded* fill still makes sense is today's single indicator, which
+  shows a real, currently-queryable fraction (today's due count), not a
+  guess about a past day.
+- **Three real states for the grid, not two, and not five.** Binary
+  (reviewed-or-not) was the first fix, then refined further: since
+  `Review.result` is `REVIEWED` or `SKIPPED`, a day can honestly be
+  classified as all-reviewed (full moon), mixed — reviewed *and* skipped
+  (half moon), or no activity (new moon outline) — all real, no invented
+  denominator. Skipping is a spec-intended, legitimate action (see
+  `submission-requirements.md`'s skip behavior), so "half" is deliberately
+  framed as neutral, not a lesser/failure state.
+- **A new read-only backend endpoint is planned, with an index.** No
+  existing endpoint returns "all of this user's reviews, grouped by day" —
+  `GET /items` doesn't include reviews, `GET /items/:id` only covers one
+  item, and `GET /export` does include everything but is semantically a
+  data-export endpoint, not a page-load data source. Plan: a small endpoint
+  (e.g. `GET /items/review-history`) doing a `groupBy` on `date`, scoped to
+  a year/date-range (default: current year) so payload size and rendered
+  grid cells stay bounded regardless of how many years of history
+  accumulate. `Review` has no index today, and the endpoint needs to join
+  `Review → Item` to filter by `userId` — `@@index([itemId, date])` is
+  planned alongside it.
+- **Stack for the rebuild: Tailwind CSS + `react-router-dom`**, both decided
+  upfront (per this project's rule to present options before library/
+  architecture decisions) rather than mid-build. The current frontend has no
+  router at all — `App.jsx` swaps `Dashboard`/`AuthForm` via local state —
+  and the redesign explicitly includes restructuring navigation (a dedicated
+  history page), so real routes are needed either way.
+
+**Problems hit and how they were solved**
+- Caught the retention-curve idea couldn't be built honestly (see above) by
+  reading the actual Prisma schema before committing to the design, not
+  after.
+- Caught the moon-phase grid's legibility bug via direct user feedback plus
+  an advisor consult, rather than continuing to iterate on the same broken
+  encoding.
+- Caught a light-mode-specific contrast bug (the moon-phase version's "no
+  review" outline color was nearly the same value as the light-mode
+  background, so empty days were almost invisible) — fixed, then reverted at
+  the user's request along with a font-weight tweak, since the final
+  approved look was the version from before those two fixes. Worth
+  remembering for whoever builds this for real: the empty/new-moon state's
+  contrast in light mode should get another look before shipping.
+
+**New concepts introduced**
+- **The denominator problem**: a percentage or intensity visualization is
+  only honest if the total it's a fraction *of* is actually known and
+  stored. "3 reviews happened Tuesday" is real; "you reviewed 60% of what
+  was due Tuesday" is fabricated the moment there's no stored record of how
+  many items were due that day. This sank both the retention-curve idea and
+  the graded history grid, and is the reason today's indicator (a real,
+  currently-queryable denominator) works while a past day's would not.
+  Same lesson, both places it appears in this session — grep for
+  "denominator" or "fabricat" in this entry to see both.
+- **Spend your boldness in one place**: a design-craft principle — pick one
+  element to be visually loud (Almanac's gold, or a single flourish like
+  today's growing moon) and keep everything around it quiet, rather than
+  having two or more elements compete for attention (Trail's green base vs.
+  its orange accent, or a moon-phase icon repeated hundreds of times across
+  a whole year instead of once).
+
+**You should be able to explain**
+1. Why does a review-history heatmap need a stored "how many items were due
+   that day" to show *volume*, but not to show *whether anything happened*
+   that day?
+2. What's the difference between the new `GET /items/review-history`
+   endpoint being planned and just reusing `GET /export` from the frontend —
+   why wasn't reusing it the right call?
+3. Why was "half moon = skipped something" deliberately designed to *not*
+   look like a worse/sadder state than a full moon?

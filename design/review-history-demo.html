@@ -1,0 +1,202 @@
+<title>Review history — Almanac (demo)</title>
+<style>
+  :root {
+    --bg: #1B1F3B; --panel: #20244A; --ink: #EFE7D0; --mute: #9AA3C9;
+    --accent: #E8C468; --border: #2E3460; --moon-dark: #262B52;
+  }
+  :root[data-mode="light"] {
+    --bg: #EEF1FA; --panel: #FFFFFF; --ink: #1B1F3B; --mute: #5B6390;
+    --accent: #B8860F; --border: #D8DCEE; --moon-dark: #D6DCF0;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-mode]) {
+      --bg: #EEF1FA; --panel: #FFFFFF; --ink: #1B1F3B; --mute: #5B6390;
+      --accent: #B8860F; --border: #D8DCEE; --moon-dark: #D6DCF0;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: Optima, Futura, ui-sans-serif, sans-serif;
+    transition: background 0.2s ease, color 0.2s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 48px 24px 96px; display: flex; flex-direction: column; gap: 40px; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 28px; }
+  header .titles { display: flex; flex-direction: column; gap: 8px; }
+  header h1 { font-family: "Big Caslon", Didot, Georgia, serif; font-size: 1.9rem; font-weight: 500; margin: 0; text-wrap: balance; }
+  header p { margin: 0; color: var(--mute); max-width: 54ch; line-height: 1.55; font-size: 0.92rem; }
+  header .eyebrow { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); }
+
+  .mode-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 16px; font-size: 0.78rem; letter-spacing: 0.03em;
+    background: var(--panel); color: var(--ink); cursor: pointer; font-family: inherit;
+  }
+  .mode-toggle:hover { border-color: var(--accent); }
+  .mode-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* today: live-filling moon (phases — a single instance, so shape-as-fraction works here) */
+  .today-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 26px 28px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  }
+  .moon-today {
+    width: 64px; height: 64px; border-radius: 50%; flex: none;
+    background: var(--moon-dark); border: 1px solid var(--border);
+    box-shadow: inset 64px 0 0 0 var(--accent);
+    transition: box-shadow 0.5s ease, background 0.5s ease, border-color 0.5s ease;
+  }
+  .moon-today.p1 { box-shadow: inset 44px 0 0 0 var(--accent); }
+  .moon-today.p2 { box-shadow: inset 32px 0 0 0 var(--accent); }
+  .moon-today.p3 { box-shadow: inset 18px 0 0 0 var(--accent); }
+  .moon-today.p4 { box-shadow: inset 0 0 0 0 var(--accent); background: var(--accent); border-color: var(--accent); }
+  .today-card .copy { display: flex; flex-direction: column; gap: 4px; }
+  .today-card .copy .label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+  .today-card .copy .count { font-size: 1.3rem; font-weight: 500; }
+  .today-card .copy .hint { font-size: 0.82rem; color: var(--mute); max-width: 40ch; line-height: 1.5; }
+  .today-card button.demo-fill {
+    margin-left: auto; border: 1px solid var(--border); background: transparent; color: var(--ink);
+    border-radius: 8px; padding: 8px 14px; font-size: 0.78rem; cursor: pointer; font-family: inherit;
+  }
+  .today-card button.demo-fill:hover { border-color: var(--accent); }
+
+  /* history grid — binary, not phased */
+  .history h2 { font-family: "Big Caslon", Didot, Georgia, serif; font-weight: 500; font-size: 1.2rem; margin: 0 0 4px; }
+  .history > p { margin: 0 0 22px; color: var(--mute); font-size: 0.85rem; max-width: 58ch; line-height: 1.5; }
+  .month-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .month-row .month-label { width: 34px; flex: none; font-size: 0.78rem; color: var(--mute); text-align: right; padding-top: 3px; }
+  .month-row .days { display: flex; gap: 5px; flex-wrap: nowrap; overflow-x: auto; padding: 3px; }
+  .day { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: none; }
+  .day .cell { width: 14px; height: 14px; border-radius: 50%; background: var(--moon-dark); border: 1px solid var(--border); }
+  .day .cell.mixed { box-shadow: inset 7px 0 0 0 var(--accent); }
+  .day .cell.done { background: var(--accent); border-color: var(--accent); }
+  .day .num { font-size: 0.58rem; color: var(--mute); font-variant-numeric: tabular-nums; }
+
+  .legend { display: flex; align-items: center; gap: 10px; margin-top: 22px; flex-wrap: wrap; font-size: 0.75rem; color: var(--mute); }
+  .legend .cell { width: 14px; height: 14px; border-radius: 50%; background: var(--moon-dark); border: 1px solid var(--border); }
+  .legend .cell.mixed { box-shadow: inset 7px 0 0 0 var(--accent); }
+  .legend .cell.done { background: var(--accent); border-color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .moon-today { transition: none; }
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="titles">
+      <span class="eyebrow">Dedicated page · not on the dashboard · back to Almanac</span>
+      <h1>Your review history</h1>
+      <p>Full indigo/gold again, not muted. History now has three honest states, not five invented ones: full moon (reviewed, nothing skipped), half moon (mixed — you engaged, but skipped something), new moon (no activity). Skipping is a legitimate move in this app, not a failure, so "half" is framed as neutral, not lesser.</p>
+    </div>
+    <button class="mode-toggle" onclick="toggleMode()">☀ / ☾ toggle</button>
+  </header>
+
+  <div class="today-card">
+    <div class="moon-today p0" id="today-moon"></div>
+    <div class="copy">
+      <span class="label">Today</span>
+      <span class="count" id="today-count">0 of 5 reviewed</span>
+      <span class="hint">Fills as you go — the one place on this page that shows a true percentage.</span>
+    </div>
+    <button class="demo-fill" onclick="advanceToday()">Simulate next review</button>
+  </div>
+
+  <div class="history">
+    <h2>Past months</h2>
+    <p>One row per month. Hover any day for the date, review count, and skip count.</p>
+    <div id="months"></div>
+
+    <div class="legend">
+      <div class="cell done"></div><span>All reviewed</span>
+      <div class="cell mixed" style="margin-left:14px;"></div><span>Mixed (some skipped)</span>
+      <div class="cell" style="margin-left:14px;"></div><span>No activity</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function toggleMode() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-mode') === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-mode', current);
+  }
+
+  // ---- past months: one row per month, binary reviewed/not ----
+  const months = [
+    { label: 'Apr', days: 30 },
+    { label: 'May', days: 31 },
+    { label: 'Jun', days: 30 },
+  ];
+  const container = document.getElementById('months');
+  let seed = 11;
+  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+  months.forEach((month) => {
+    const row = document.createElement('div');
+    row.className = 'month-row';
+    const label = document.createElement('div');
+    label.className = 'month-label';
+    label.textContent = month.label;
+    row.appendChild(label);
+    const days = document.createElement('div');
+    days.className = 'days';
+    for (let d = 1; d <= month.days; d++) {
+      const r = rand();
+      // three real states from Review.result: none / mixed (reviewed+skipped) / all reviewed
+      let state = 'none', reviewCount = 0, skipCount = 0;
+      if (r > 0.65) {
+        state = 'done';
+        reviewCount = Math.ceil(rand() * 4) + 1;
+      } else if (r > 0.4) {
+        state = 'mixed';
+        reviewCount = Math.ceil(rand() * 3) + 1;
+        skipCount = Math.ceil(rand() * 2);
+      }
+
+      const day = document.createElement('div');
+      day.className = 'day';
+      const cell = document.createElement('div');
+      cell.className = 'cell' + (state !== 'none' ? ' ' + state : '');
+      cell.title = state === 'none'
+        ? `${month.label} ${d} — no activity`
+        : `${month.label} ${d} — ${reviewCount} reviewed, ${skipCount} skipped`;
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = d;
+      day.appendChild(cell);
+      day.appendChild(num);
+      days.appendChild(day);
+    }
+    row.appendChild(days);
+    container.appendChild(row);
+  });
+
+  // ---- today: moon growth demo ----
+  const totalDue = 5;
+  let reviewed = 0;
+  const phaseForRatio = (n, total) => {
+    const ratio = n / total;
+    if (ratio <= 0) return 'p0';
+    if (ratio < 0.3) return 'p1';
+    if (ratio < 0.55) return 'p2';
+    if (ratio < 0.85) return 'p3';
+    return 'p4';
+  };
+  function renderToday() {
+    const moon = document.getElementById('today-moon');
+    moon.className = 'moon-today ' + phaseForRatio(reviewed, totalDue);
+    document.getElementById('today-count').textContent = `${reviewed} of ${totalDue} reviewed`;
+  }
+  function advanceToday() {
+    reviewed = reviewed >= totalDue ? 0 : reviewed + 1;
+    renderToday();
+  }
+  renderToday();
+</script>
