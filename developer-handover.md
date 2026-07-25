@@ -226,6 +226,13 @@ build step, no server needed — but it's now a *reference*, not the only
 implementation: the real page is built (§10a). **Design decisions below are
 still final/locked** for anything not yet built (§10b).
 
+**Committed locally, not pushed to `origin/main` yet** (`3dded9d`) —
+deliberately held back until the whole redesign (§10b too) is finished, so
+production gets one complete visual pass instead of a half-restyled app
+(pushing to `main` auto-deploys both backend and frontend on Vercel, per
+§2/§11). Don't push until the user explicitly asks for it, and don't
+re-offer after every commit in the meantime.
+
 ### 10a. Built: infra + the review-history page
 
 Done, live-verified in a browser, backend tests passing (19/19):
