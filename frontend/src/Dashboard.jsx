@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { createItem, exportData, getDueItems, listItems, reviewItem, skipItem, todayLocal } from './api';
 import ItemDetail from './ItemDetail';
 import AdminPanel from './AdminPanel';
@@ -120,6 +121,9 @@ export default function Dashboard({ token, user, onLogout }) {
     <div>
       <header className="dashboard-header">
         <h1>{view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}</h1>
+        <Link to="/history" className="link">
+          Review history
+        </Link>
         <button type="button" className="link" onClick={onLogout}>
           Log out
         </button>

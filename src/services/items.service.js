@@ -92,6 +92,41 @@ async function skipItem(userId, id, date) {
   return getItemById(userId, id);
 }
 
+// Pure: turns Review.groupBy([date, result]) rows into one entry per active
+// day, with a 3-state read: 'full' (reviewed, nothing skipped that day),
+// 'half' (any skip that day, alone or mixed with a review -- skipping is a
+// legitimate action, not a lesser one). A day with no Review rows at all is
+// simply absent -- the caller renders that as the empty/new-moon state.
+function deriveReviewHistory(groupedRows) {
+  const byDate = new Map();
+  for (const row of groupedRows) {
+    const dateStr = row.date.toISOString().slice(0, 10);
+    const day = byDate.get(dateStr) || { date: dateStr, reviewCount: 0, skipCount: 0 };
+    if (row.result === 'REVIEWED') day.reviewCount += row._count;
+    else day.skipCount += row._count;
+    byDate.set(dateStr, day);
+  }
+
+  return [...byDate.values()]
+    .map((day) => ({ ...day, state: day.skipCount > 0 ? 'half' : 'full' }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Sparse and scoped to one year on purpose: payload size grows with actual
+// activity, not with the size of the calendar or how many years have passed.
+async function getReviewHistory(userId, year) {
+  const grouped = await prisma.review.groupBy({
+    by: ['date', 'result'],
+    where: {
+      item: { userId, deletedAt: null },
+      date: { gte: parseDate(`${year}-01-01`), lte: parseDate(`${year}-12-31`) },
+    },
+    _count: true,
+  });
+
+  return deriveReviewHistory(grouped);
+}
+
 module.exports = {
   createItem,
   listItems,
@@ -101,4 +136,6 @@ module.exports = {
   listDueItems,
   reviewItem,
   skipItem,
+  getReviewHistory,
+  deriveReviewHistory,
 };

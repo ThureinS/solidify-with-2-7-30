@@ -47,6 +47,10 @@ export function getDueItems(token) {
   return request(`/items/due?date=${todayLocal()}`, { token });
 }
 
+export function getReviewHistory(token, year) {
+  return request(`/items/review-history?year=${year}`, { token });
+}
+
 export function listItems(token, { status = 'active', page = 1 } = {}) {
   return request(`/items?status=${status}&page=${page}`, { token });
 }

@@ -10,4 +10,10 @@ const dueQuerySchema = z.object({
   date: dateStringSchema,
 });
 
-module.exports = { reviewActionSchema, dueQuerySchema };
+// year is display scope, not a scheduling input -- unlike dueQuerySchema's
+// date, there's no correctness risk in defaulting it server-side.
+const reviewHistoryQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(9999).optional(),
+});
+
+module.exports = { reviewActionSchema, dueQuerySchema, reviewHistoryQuerySchema };

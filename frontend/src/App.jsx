@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import AuthForm from './AuthForm';
 import Dashboard from './Dashboard';
+import ReviewHistoryPage from './ReviewHistoryPage';
 import { getMe } from './api';
 import './App.css';
 
@@ -45,14 +47,27 @@ function App() {
     };
   }, [token]);
 
-  return (
-    <main className="app">
-      {token ? (
-        <Dashboard token={token} user={user} onLogout={handleLogout} />
-      ) : (
+  if (!token) {
+    return (
+      <main className="app">
         <AuthForm onLoggedIn={handleLoggedIn} />
-      )}
-    </main>
+      </main>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <main className="app">
+            <Dashboard token={token} user={user} onLogout={handleLogout} />
+          </main>
+        }
+      />
+      <Route path="/history" element={<ReviewHistoryPage token={token} />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

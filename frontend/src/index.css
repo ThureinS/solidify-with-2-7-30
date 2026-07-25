@@ -1,3 +1,52 @@
+/* Tailwind, scoped to theme + utilities only -- the "preflight" (base) layer
+   resets browser defaults (headings, buttons, form controls) that the
+   existing hand-written screens below still rely on. Skipping it means
+   Tailwind utility classes work on new markup (the history page) without
+   silently restyling Dashboard/AuthForm/ItemDetail/AdminPanel, which haven't
+   had their own Almanac design pass yet. */
+@import 'tailwindcss/theme' layer(theme);
+@import 'tailwindcss/utilities' layer(utilities);
+
+/* Almanac design tokens (see design/review-history-demo.html) -- available
+   as Tailwind utilities (bg-almanac-bg, text-almanac-ink, font-display...)
+   for the new history page. Dark is the default; :root[data-mode="light"]
+   (set by the page's own toggle) and the OS-level light preference both
+   override it, same as the approved reference file. */
+@theme {
+  --color-almanac-bg: #1b1f3b;
+  --color-almanac-panel: #20244a;
+  --color-almanac-ink: #efe7d0;
+  --color-almanac-mute: #9aa3c9;
+  --color-almanac-accent: #e8c468;
+  --color-almanac-border: #2e3460;
+  --color-almanac-moon-dark: #262b52;
+
+  --font-display: 'Big Caslon', Didot, Georgia, serif;
+  --font-body: Optima, Futura, ui-sans-serif, sans-serif;
+}
+
+:root[data-mode='light'] {
+  --color-almanac-bg: #eef1fa;
+  --color-almanac-panel: #ffffff;
+  --color-almanac-ink: #1b1f3b;
+  --color-almanac-mute: #5b6390;
+  --color-almanac-accent: #b8860f;
+  --color-almanac-border: #d8dcee;
+  --color-almanac-moon-dark: #d6dcf0;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-mode]) {
+    --color-almanac-bg: #eef1fa;
+    --color-almanac-panel: #ffffff;
+    --color-almanac-ink: #1b1f3b;
+    --color-almanac-mute: #5b6390;
+    --color-almanac-accent: #b8860f;
+    --color-almanac-border: #d8dcee;
+    --color-almanac-moon-dark: #d6dcf0;
+  }
+}
+
 :root {
   color-scheme: light;
 

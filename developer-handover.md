@@ -215,67 +215,107 @@ sending a fake date — fine for a personal tool.
   build this (course context: a beginner + an AI co-pilot). Not relevant to
   running the app, relevant if you're continuing that workflow.
 
-## 10. Planned: frontend redesign (design locked 2026-07-25, not yet built)
+## 10. Frontend redesign — Almanac (design locked 2026-07-25; history page built same day)
 
 A full frontend visual + UX revamp was scoped and design-explored in a
-dedicated session (see `implementation-journey.md`, 2026-07-25 entry, for the
-full back-and-forth). **Design decisions below are final** — implementation
-hasn't started. A static, self-contained reference build of the approved
-design lives at **`design/review-history-demo.html`** — open it directly in a
-browser, no build step, no server needed.
+dedicated session (see `implementation-journey.md`, 2026-07-25 entries, for
+the full back-and-forth and build log). A static, self-contained reference
+build of the approved design still lives at
+**`design/review-history-demo.html`** — open it directly in a browser, no
+build step, no server needed — but it's now a *reference*, not the only
+implementation: the real page is built (§10a). **Design decisions below are
+still final/locked** for anything not yet built (§10b).
+
+### 10a. Built: infra + the review-history page
+
+Done, live-verified in a browser, backend tests passing (19/19):
+
+- **Backend**: `GET /items/review-history?year=YYYY` (route + controller +
+  `items.service.js`), grouping `Review` by date/result into a sparse
+  `{ year, days: [{ date, reviewCount, skipCount, state }] }` response.
+  `state` is `'full'` (reviewed, no skips that day) or `'half'` (any skip
+  that day, alone or mixed with a review — a deliberate call: skip-only
+  days read the same as mixed, not as their own 4th state or as "no
+  activity"). Days with zero rows are simply absent from the array.
+  `@@index([itemId, date])` added to `Review` (migration
+  `20260725110336_add_review_index`). Grouping/state logic is a pure,
+  unit-tested function (`deriveReviewHistory` in `items.service.js`,
+  covered by `tests/reviewHistory.test.js`) separate from the DB call, same
+  pattern `schedule.service.js` already used.
+- **Frontend infra**: Tailwind CSS v4 (`@tailwindcss/vite`) and
+  `react-router-dom` installed. `frontend/src/index.css` imports only
+  Tailwind's `theme` + `utilities` layers (**not** `preflight` — see the
+  gotcha below) and defines the Almanac palette as `@theme` CSS variables,
+  dark by default with a `[data-mode="light"]` override + OS-preference
+  fallback. `App.jsx` now has two routes: `/` (old Dashboard/AuthForm swap,
+  logic untouched) and `/history` (new page). Dashboard's own internal
+  due/all/admin tab state was deliberately left alone, not converted to
+  nested routes.
+- **The review-history page** (`frontend/src/ReviewHistoryPage.jsx`): the
+  three-state month grid, a year switcher (`<year>`/`>`, capped at the
+  current year), the live-filling today moon (5 discrete phases, same
+  ratio thresholds as the reference file), and the light/dark toggle.
+  Today's moon fraction is `handled / (dueCount + handled)`, where
+  `dueCount` = `GET /items/due`'s current result (which includes overdue
+  backlog, so the copy says "today's workload", not "due today") and
+  `handled` = today's `reviewCount + skipCount` from the history endpoint —
+  reconstructing "today's original total" without ever storing it, valid
+  only because the scheduler already forbids early reviews/skips.
+- **Locked UX rule for the whole redesign, not just this page: follow the
+  device's OS light/dark preference by default; the in-page toggle is a
+  manual override, not the primary control.** Already how the history page
+  behaves (`mode` state starts `null` → CSS falls through to
+  `@media (prefers-color-scheme)`; clicking the toggle sets an explicit
+  `light`/`dark` that then wins). Any future screen in this redesign should
+  follow the same default-to-OS, override-via-toggle pattern rather than
+  defaulting to a fixed theme.
+
+**Two gotchas a next session needs to know, both bitten once already:**
+
+1. **`App.css` has bare element selectors** (`button {}`, `h1 {}`, `form {}`,
+   etc.), not scoped to `.app`. Any new Tailwind-styled page reuses the same
+   HTML elements, so without scoping, `App.css` bleeds into it (discovered
+   as an orange `<button>` showing up on the unrelated new page). They're
+   now scoped as `:where(.app) button`, etc. — **`:where()`, not a plain
+   `.app` prefix** — because a plain `.app button` selector is *more
+   specific* than the bare `button` it replaced, which silently outranked
+   existing overrides elsewhere in the file (broke `.add-item-form`'s
+   row layout). `:where()` scopes without adding specificity. If you add
+   more global selectors to `App.css`, scope them the same way.
+2. **Skipping Tailwind's Preflight means no CSS reset on the new page at
+   all.** Every native element (`<a>`, `<button>`, eventually `<input>`/
+   `<select>` if the redesign reaches a form) keeps its raw browser
+   default — link-blue/visited-purple text, gray button chrome — unless a
+   class explicitly overrides it. Bitten twice already: a nav `<Link>` with
+   only a `hover:` class (no base text color) rendered as native
+   link-purple in dark mode; a year-switcher `<button>` with only a
+   `hover:` class kept native button chrome (gray box). Any bare `<a>`/
+   `<button>` with just a `hover:*` Tailwind class and nothing else is
+   suspect — give it an explicit base color and, for buttons,
+   `bg-transparent border-0 p-0`.
+
+### 10b. Not yet built: restyling the rest of the app
+
+Explicitly deferred this session (confirmed with the user): Dashboard,
+AuthForm, ItemDetail, and AdminPanel still use the original hand-written
+`App.css` look, completely untouched. `design/review-history-demo.html`
+only ever covered the history page — there is **no approved Almanac layout
+for these four screens yet**. Restyling them (and revisiting their user
+flow/UX, not just their color palette) is the next phase of this redesign,
+and needs its own design pass before implementation — the same
+"design-lock before code" process this session followed for the history
+page, not a straight port of one screen's tokens onto four different
+screens' layouts.
 
 **Direction — "Almanac":** deep indigo (`#1B1F3B`) background, gold accent
 (`#E8C468`), Big Caslon/Didot serif for display type, Optima/Futura for body
 (all with system-font fallbacks — no webfonts loaded). Full light-mode token
-set already worked out in the demo file (`:root[data-mode="light"]` block).
-Two other directions were explored and rejected: a "Lab Notebook" concept
-(dropped — its signature idea needed a memory-retention curve the schema
-can't honestly support, see §"why" below) and a "Trail" forest/orange
-concept (palette liked, but ultimately not chosen over Almanac).
-
-**Stack decisions for the rebuild:**
-- **Tailwind CSS** — replaces the current hand-written CSS custom-properties
-  setup (`frontend/src/App.css`/`index.css`).
-- **`react-router-dom`** — the app currently has *no* routing at all
-  (`frontend/src/App.jsx` swaps `Dashboard`/`AuthForm` via local state).
-  Real routes are needed for the new dedicated history page below.
-- **Gamification stays visual-only** — no new persisted state (no XP/points/
-  achievement tables). The one exception, below, is a small read-only
-  aggregation endpoint — that's a query, not new state.
-
-**New feature: a dedicated "review history" page** (its own route, not part
-of the dashboard):
-- **History grid** — one row per calendar month (not GitHub's week-columns —
-  reads like a calendar, not a generic contribution graph), moon-icon per
-  day, **three honest states**, all derived from `Review.result` with no
-  invented denominator: full moon = reviewed that day with nothing skipped;
-  half moon = mixed (reviewed *and* skipped); new-moon outline = no activity.
-  Skipping is a legitimate, spec-intended action — the UI must not frame
-  "half" as a failure state.
-- **Today's indicator is different on purpose**: a single larger moon (not
-  part of the grid) that fills live through real phases
-  (new→crescent→half→gibbous→full) as a fraction of *today's actual due
-  count* — that ratio is real and queryable right now, unlike any past day.
-- **Rejected for the grid**: shading each day by review *volume* (a 5-level
-  intensity scale, GitHub-heatmap style). Killed for two reasons — (1) shape
-  alone (moon phase) is a weak visual channel for at-a-glance scanning, two
-  adjacent phases look near-identical at small size; (2) there's no stored
-  "how many items were due on this past day" anywhere (`nextReviewDate` only
-  ever holds the *current* value), so a graded "% of due reviewed" for a
-  past day would be fabricated, the same trap as the rejected retention
-  curve.
-
-**Backend work needed to support the history page** (not yet built):
-- One new **read-only** endpoint, e.g. `GET /items/review-history`, grouping
-  `Review` rows by `date` (and by result, to derive the three-state grid).
-  Should accept a `year`/date-range param — default to the current year only,
-  not all-time — so payload size and the number of rendered grid cells stay
-  bounded no matter how many years of history accumulate.
-- **`Review` currently has no index at all** in `prisma/schema.prisma`. The
-  new endpoint has to join `Review → Item` (to filter by `userId`, since
-  `Review` doesn't store it directly) and group by date — add
-  `@@index([itemId, date])` to `Review` as part of that migration, or the
-  join will scan the full table once review rows number in the thousands.
+set already worked out (both in the demo file and now for real in
+`frontend/src/index.css`). Two other directions were explored and rejected:
+a "Lab Notebook" concept (dropped — its signature idea needed a
+memory-retention curve the schema can't honestly support, see §"why" below)
+and a "Trail" forest/orange concept (palette liked, but ultimately not
+chosen over Almanac).
 
 **Playful/gamification ideas discussed, not committed:** a live-filling
 "today" indicator (built into the design above) and a weekly recap

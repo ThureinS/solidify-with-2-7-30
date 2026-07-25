@@ -74,6 +74,16 @@ async function skipItem(req, res, next) {
   }
 }
 
+async function reviewHistory(req, res, next) {
+  try {
+    const year = req.validatedQuery.year ?? new Date().getFullYear();
+    const days = await itemsService.getReviewHistory(req.userId, year);
+    res.json({ year, days });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createItem,
   listItems,
@@ -83,4 +93,5 @@ module.exports = {
   listDue,
   reviewItem,
   skipItem,
+  reviewHistory,
 };

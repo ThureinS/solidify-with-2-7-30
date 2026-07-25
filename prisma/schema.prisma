@@ -54,5 +54,6 @@ model Review {
 
   item Item @relation(fields: [itemId], references: [id])
 
+  @@index([itemId, date])
   @@map("reviews")
 }

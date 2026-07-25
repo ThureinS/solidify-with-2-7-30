@@ -4,21 +4,29 @@
   padding: 3rem 1.5rem 4rem;
 }
 
-h1 {
+/* Scoped under :where(.app) -- not bare element selectors, and not plain
+   ".app <el>" -- so these rules stay confined to the pre-Almanac screens
+   (always wrapped in <main className="app">) without leaking into the new
+   Tailwind-styled pages, which reuse the same HTML elements (button, h1,
+   ...) with their own look. :where() contributes zero specificity, so this
+   scoping doesn't change how these rules rank against the more specific
+   overrides below (e.g. .add-item-form) -- only ".app" as a bare class
+   selector would have, by adding an extra type-selector's worth of weight. */
+:where(.app) h1 {
   font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
 }
 
-form {
+:where(.app) form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
-label {
+:where(.app) label {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -62,9 +70,9 @@ label {
   accent-color: var(--color-accent);
 }
 
-input,
-select,
-textarea {
+:where(.app) input,
+:where(.app) select,
+:where(.app) textarea {
   padding: 0.75rem 1rem;
   font-size: 1rem;
   font-family: inherit;
@@ -74,19 +82,19 @@ textarea {
   border-radius: var(--radius-md);
 }
 
-textarea {
+:where(.app) textarea {
   resize: vertical;
   line-height: 1.5;
 }
 
-input:focus,
-select:focus,
-textarea:focus {
+:where(.app) input:focus,
+:where(.app) select:focus,
+:where(.app) textarea:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
 
-button {
+:where(.app) button {
   padding: 0.75rem 1.25rem;
   font-size: 1rem;
   font-weight: 500;
@@ -99,16 +107,19 @@ button {
   transition: background-color 0.15s ease;
 }
 
-button:hover:not(:disabled) {
+:where(.app) button:hover:not(:disabled) {
   background: var(--color-accent-hover);
 }
 
-button:disabled {
+:where(.app) button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-button.link {
+/* .link, not button.link -- react-router's <Link> renders an <a>, which
+   needs the same treatment as the plain-text buttons using this class
+   (Dashboard's "Review history" nav link is an <a>, not a <button>). */
+:where(.app) .link {
   background: none;
   color: var(--color-text-muted);
   text-decoration: underline;
@@ -116,28 +127,28 @@ button.link {
   align-self: flex-start;
 }
 
-button.link:hover:not(:disabled) {
+:where(.app) .link:hover:not(:disabled) {
   background: none;
   color: var(--color-text);
 }
 
-button.secondary {
+:where(.app) button.secondary {
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
 }
 
-button.secondary:hover:not(:disabled) {
+:where(.app) button.secondary:hover:not(:disabled) {
   background: var(--color-bg);
 }
 
-button.danger {
+:where(.app) button.danger {
   background: var(--color-surface);
   color: var(--color-error);
   border: 1px solid var(--color-error);
 }
 
-button.danger:hover:not(:disabled) {
+:where(.app) button.danger:hover:not(:disabled) {
   background: var(--color-error);
   color: var(--color-accent-contrast);
 }

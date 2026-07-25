@@ -698,3 +698,460 @@ the full spec this session produced.
    why wasn't reusing it the right call?
 3. Why was "half moon = skipped something" deliberately designed to *not*
    look like a worse/sadder state than a full moon?
+
+## 2026-07-25 — Frontend redesign: backend piece built (review-history endpoint)
+
+Build session for the locked Almanac design. First feature: the backend
+support the history page needs. No frontend code yet.
+
+**What was built**
+- `prisma/schema.prisma`: added `@@index([itemId, date])` to `Review`,
+  migrated locally (`20260725110336_add_review_index`).
+- New route `GET /items/review-history?year=2026` (route + controller +
+  service). Groups this user's `Review` rows by date for the given year,
+  returns only days with activity: `{ year, days: [{ date, reviewCount,
+  skipCount, state }] }`. `state` is `'full'` (reviewed, no skips that day),
+  `'half'` (any skip that day — alone or mixed with a review), or the day is
+  just absent from the array (no activity at all).
+- The grouping/state logic lives in its own pure function
+  (`deriveReviewHistory` in `items.service.js`), separate from the
+  database-calling part (`getReviewHistory`), so it could get a real unit
+  test (`tests/reviewHistory.test.js`) without needing a database — same
+  trick `schedule.service.js` already used for the scheduling math.
+- Verified live against the real dev database, not just the unit test:
+  logged in as the seeded demo user, hit the endpoint (got real seeded
+  `full` days back), then skipped an item dated today and confirmed it
+  showed up as today's `half` day.
+
+**Key decisions and why**
+- **Skip-only day = half moon**, not a 4th state and not "no activity."
+  Decided with the user: reviewed-only = full, any skip involved = half,
+  nothing at all = blank. The locked spec's original wording ("mixed —
+  reviewed *and* skipped") technically didn't cover a day with *only*
+  skips — the demo's random data generator never produced that case, so it
+  went unnoticed until building the real thing. Caught by reasoning through
+  the state function before writing it, not after.
+- **Scope for this build**: history page gets built and wired to a real
+  backend first; restyling the existing Dashboard/AuthForm/ItemDetail/
+  AdminPanel screens is explicitly deferred to a later session, since the
+  approved reference file (`design/review-history-demo.html`) only covers
+  the history page — those other four screens have no approved look yet.
+- **Sparse response, not one entry per calendar day.** A day with zero
+  `Review` rows can't come back from a `GROUP BY` at all (see below), and
+  even if it could, we wouldn't want it to — payload size should grow with
+  actual activity, not with how many days are in the calendar.
+
+**Problems hit and how they were solved**
+- Local Postgres wasn't running (Docker daemon was off) when trying to run
+  the migration. Started Docker Desktop, then `docker compose up -d db
+  redis`, then the migration went through.
+
+**New concepts introduced**
+- **Why the index needs `itemId`, not `userId`**: `Review` has no `userId`
+  column — only `Item` does. Finding "this user's reviews" means first
+  finding their `Item` rows, then finding `Review` rows attached to those
+  items — a join, not a direct filter. `@@index([itemId, date])` is what
+  lets Postgres jump straight to a given item's reviews (then narrow by
+  date) instead of scanning the whole `reviews` table. Analogy: a library
+  where checkout cards are filed by book ID, not borrower name — to find
+  what one person borrowed, you first find their books, then look up those
+  books' cards; sorting the cards by (book ID, date) is what makes that
+  lookup fast instead of a full shelf-by-shelf search.
+- **Why `GROUP BY` can never produce an empty group**: `GROUP BY` only
+  groups rows that actually exist in the table. If nobody touched anything
+  on a given day, there is no `Review` row with that date — so there's
+  nothing for `GROUP BY date` to gather into a group. It's not a filtering
+  step applied afterward; a day with zero rows structurally cannot appear
+  in a `GROUP BY` result, no matter what label (`'none'`, `null`, anything)
+  you might want to give it. Tiny example: if `reviews` only has rows for
+  Jan 3 and Jan 5, `SELECT date, count(*) FROM reviews GROUP BY date`
+  returns exactly two rows — Jan 4 was never a candidate, because there was
+  no Jan-4 row to begin with.
+- Note: a string like `'none'` is *not* a JS-truthiness problem (only `''`,
+  the empty string, is falsy) — that reasoning doesn't apply to why absent
+  days aren't in the response; the `GROUP BY` mechanics above are the actual
+  reason.
+
+**You should be able to explain**
+1. Why does the index need to include `itemId`, when the query filters by
+   `userId`?
+2. Why can a day with zero `Review` rows never show up in a `GROUP BY`
+   result, regardless of how we might want to label it?
+3. Why is skip-only treated the same as mixed (reviewed + skipped) for the
+   history grid's state, instead of being its own 4th state?
+
+## 2026-07-25 — Frontend redesign: Tailwind + routing wired up
+
+Second build step. Still no visual feature yet -- this is the plumbing the
+history page needs: a styling system that can express the Almanac look, and
+a URL the page can live at. Verified both live in a browser before moving on.
+
+**What was built**
+- Installed **Tailwind CSS v4** (`@tailwindcss/vite` plugin -- no separate
+  PostCSS config file needed in v4) and **`react-router-dom`**.
+- `frontend/src/index.css`: imported only Tailwind's `theme` and `utilities`
+  layers, deliberately **skipping `preflight`** (Tailwind's browser-reset
+  layer). Added the Almanac palette as `@theme` CSS variables
+  (`--color-almanac-bg`, `--color-almanac-ink`, etc.), dark by default, with
+  a `:root[data-mode="light"]` override and an OS-preference media query
+  fallback -- same mechanism as the approved reference file.
+- `frontend/src/main.jsx`: wrapped the app in `<BrowserRouter>`.
+- `frontend/src/App.jsx`: added two routes -- `/` (existing Dashboard/
+  AuthForm swap, logic untouched) and `/history` (new page, placeholder for
+  now). Dashboard's own internal due/all/admin tab-switching was left
+  exactly as it was -- not converted to nested routes, since restyling/
+  restructuring that screen is explicitly deferred to a later session.
+- Added a "Review history" link in the Dashboard header.
+- Verified in a real browser (Playwright): `/history` renders the Almanac
+  palette correctly (serif heading, muted link, indigo-tinted background);
+  `/` still renders pixel-identical to before -- confirming the preflight
+  skip actually worked, not just in theory.
+
+**Key decisions and why**
+- **Skip Tailwind's preflight layer.** Preflight is a global reset (strips
+  default button/heading/list styling) that applies the moment the
+  stylesheet loads, regardless of which elements have Tailwind classes on
+  them. The existing Dashboard/AuthForm/ItemDetail/AdminPanel screens still
+  lean on un-reset browser defaults working together with `App.css`.
+  Importing all of Tailwind (`@import "tailwindcss"`) would have silently
+  restyled those screens without a single line of their code changing.
+  Importing `theme` + `utilities` only avoids that entirely.
+- **Tokens as CSS variables, not a new component-level dark-mode context.**
+  Every Almanac utility class Tailwind generates resolves to
+  `var(--color-almanac-*)`, not a literal hex value. That's *why* the
+  light/dark toggle (built in the next step) will only ever need to flip one
+  `data-mode` attribute on `<html>` -- the browser re-evaluates which CSS
+  rule wins for that variable and repaints every element using it, with no
+  React re-render or JS needed to "push" the new colors around.
+- **Minimal router integration, not a full route rewrite.** Only added what
+  the new page needs (`/` and `/history`). Dashboard's internal view state
+  is left alone on purpose -- turning it into real nested routes is a
+  reasonable future improvement, but out of scope for "add the history page"
+  and would touch a screen with no approved redesign yet.
+
+**Problems hit and how they were solved**
+- None -- infra install and wiring went cleanly; the Docker/DB issue from
+  the previous step didn't recur since the backend server was already
+  running against the now-started containers.
+
+**New concepts introduced**
+- **CSS layers / Tailwind's three-layer import.** Tailwind v4 ships as
+  `theme` (design tokens), `base`/`preflight` (a browser CSS reset), and
+  `utilities` (the actual `bg-*`/`text-*`/etc. classes) as separately
+  importable pieces, instead of one all-or-nothing stylesheet. Importing a
+  subset is a normal, supported way to let Tailwind coexist with an existing
+  hand-written stylesheet in the same app.
+- **CSS custom properties resolve at paint time, not build time.** A
+  Tailwind utility like `bg-almanac-bg` compiles down to
+  `background-color: var(--color-almanac-bg)` -- the browser looks up that
+  variable's current value fresh on every repaint, following the normal CSS
+  cascade. That's what makes a one-attribute dark/light toggle "just work"
+  everywhere at once.
+
+**You should be able to explain (answered here per your standing note to
+auto-log and keep moving, rather than pausing for a reply each time):**
+
+1. *Why would importing all of Tailwind (including preflight) have risked
+   breaking the existing Dashboard, even though no new Tailwind classes were
+   added to `Dashboard.jsx` itself?* -- Preflight resets styles by targeting
+   plain HTML element selectors (`button`, `h1`, `ul`, etc.), not "elements
+   with a Tailwind class." It doesn't check whether an element opted in --
+   it applies globally the moment the stylesheet is loaded. Since
+   `Dashboard.jsx`'s markup depends on the browser's *un-reset* defaults
+   combining with `App.css`'s rules, Preflight would strip those defaults
+   out from under it and change how Dashboard looks, without Dashboard's own
+   code being touched at all.
+2. *Why does the light/dark toggle only need to change one attribute
+   instead of touching every styled element in JS?* -- Because color values
+   are stored as CSS variables (`--color-almanac-ink`, etc.), and every
+   utility class references the variable, not a literal color. Setting
+   `data-mode="light"` on `<html>` changes which CSS rule defines that
+   variable; the browser's normal cascade + repaint propagates the new value
+   to every element using `var(--color-almanac-ink)` immediately. No
+   component re-renders, no JS walks the DOM -- it's the same mechanism as
+   changing one recipe ingredient and every dish that references "the
+   sauce" tasting different, without re-cooking each dish individually.
+
+## 2026-07-25 — Frontend redesign: review history page built (feature complete)
+
+Third build step: the actual page. Built against the real backend endpoint
+from step one, not mock data, and checked in a real browser (Playwright) at
+every stage rather than trusting the code to be right by inspection.
+
+**What was built**
+- `frontend/src/api.js`: added `getReviewHistory(token, year)`.
+- `frontend/src/ReviewHistoryPage.jsx`: the real page, replacing the
+  placeholder from the infra step. Fetches `getReviewHistory` (for the grid)
+  and `getDueItems` (for today's remaining workload) in parallel, derives
+  today's fraction, and renders:
+  - **Today's moon** -- a single 64px circle, 5 discrete phases (not a smooth
+    fill), same `inset Npx` box-shadow trick and same ratio thresholds
+    (0.3 / 0.55 / 0.85) as the approved reference file, ported as inline
+    styles rather than refactored into Tailwind classes since the values are
+    tied to this one element's pixel size.
+  - **The month grid** -- one row per month, from January through the
+    current month (or all 12 for a past year), one small circle per day,
+    three states (full / half / no border-fix applied to the last one --
+    see below).
+  - A **year switcher** (`<` `2026` `>`), disabled going past the current
+    year -- the backend's `year` param existed but had no way to reach past
+    years from the UI until this.
+  - The **light/dark toggle** button, setting `data-mode` on `<html>`.
+- Live-verified in the browser: seeded data rendered as real full/half
+  moons in the correct months; toggling light/dark actually re-themed the
+  whole page; `npm run lint`, `npm run build` (frontend), and `npm test`
+  (backend, 19 tests) all still pass.
+
+**Key decisions and why**
+- **"Handled today", not "reviewed today."** The due-items endpoint
+  (`GET /items/due`) returns *outstanding* items -- anything with
+  `nextReviewDate <= today`, which includes overdue backlog from previous
+  days, not just what newly became due this morning. So "today's total" in
+  the UI is honestly labeled as *today's workload* (due + overdue combined),
+  and the numerator counts both reviews and skips (either one removes an
+  item from that workload), not reviews alone -- otherwise skipping
+  everything due today would make the indicator look emptier than it
+  actually is, which is the same "don't make skipping look like failure"
+  principle from the state-derivation decision two steps ago.
+- **The `dueCount + handledToday` trick for today's total.** There's no
+  stored "how many were due at the start of today" -- once an item is
+  reviewed or skipped, it leaves the due list. But nothing due today can
+  have been resolved *before* today (no-early-reviews is a hard rule the
+  scheduler already enforces), so *remaining due now* plus *today's review/
+  skip count so far* reconstructs the original total exactly, with two
+  numbers that are both real and queryable right now.
+
+**Problems hit and how they were solved**
+- **A real bug, caught by looking at a screenshot, not by reading the code.**
+  The year-switcher and mode-toggle buttons rendered with the old app's
+  orange button styling, even though `ReviewHistoryPage.jsx` never imports
+  `App.css` or uses any of its class names. Cause: `App.css` had *unscoped*
+  element selectors (`button { ... }`, `h1 { ... }`, `form { ... }`, etc.)
+  with no `.app` qualifier, so they applied to every `<button>`/`<h1>`/etc.
+  on the page, including the new one, the moment `App.css` loaded anywhere
+  in the app (which it does, globally, via `App.jsx`'s import). Fixed by
+  scoping those selectors.
+  - **First fix attempt was itself a bug.** Scoping them as `.app button`
+    (adding `.app` as a plain class-selector prefix) fixed the leak but
+    *broke the old screens*: `.app form`'s specificity (class + element =
+    two "weight units") became higher than the existing
+    `.add-item-form { flex-direction: row }` override (one class = one
+    weight unit) that used to win, so the add-item form's input and button
+    stacked vertically instead of sitting side by side. Caught the same way
+    as the original bug -- a screenshot comparison against the pre-change
+    version, not by reasoning about the CSS in the abstract.
+  - **Real fix**: `:where(.app) button` instead of `.app button`. `:where()`
+    matches the same elements but always contributes *zero* specificity, so
+    the scoping is invisible to every other selector's ranking -- the old
+    screens' internal overrides (`.add-item-form`, `.tabs button`, etc.)
+    keep exactly the priority they had before, while the new page still
+    can't be reached by any of these rules at all.
+
+**New concepts introduced**
+- **CSS specificity is additive per selector "part", and scoping can
+  accidentally change relative ranking.** A rule's specificity is a count
+  of (roughly) IDs, classes/attributes, and element types in its selector --
+  not just "is this rule more targeted." Prefixing an existing bare-element
+  rule with a class doesn't just "make it more specific in general," it
+  changes its rank *relative to every other rule*, which can silently flip
+  which of two rules wins somewhere else in the file.
+- **`:where()`**: a CSS selector wrapper that matches normally but always
+  has zero specificity, no matter how complex the selector inside it is.
+  Used here specifically to scope a rule to a container (`.app`) without
+  that container adding any weight to the rule's specificity -- "match only
+  inside here" without "and also outrank things that used to beat me."
+- **Reconstructing a value from two live numbers instead of storing it.**
+  "Today's total due" isn't stored anywhere, but it doesn't need to be --
+  it's recoverable from *what's currently left* (queryable) plus *what's
+  already been resolved today* (also queryable), given one true fact about
+  the domain (no early reviews) that guarantees today's resolved items
+  really were due today and not sitting in the log from three days ago.
+
+**You should be able to explain**
+1. Why did wrapping the scoping class in `:where()` fix the "Add item"
+   button layout regression, when `.app button` (without `:where()`) did
+   not, even though both versions stopped the leak into the new page?
+2. Why does `dueCount + handledToday` correctly reconstruct today's original
+   workload, when there's no `Review` or `Item` field anywhere that stores
+   "how many were due when the day started"?
+3. Why does the today-indicator's copy say "workload" instead of "due
+   today", given what `GET /items/due` actually returns?
+
+**Answers (auto-logged per your standing note, not gating on a reply):**
+1. Both stop the leak (both only match inside `.app`), but they differ in
+   how much specificity they add. `.app button` is a class selector *plus*
+   an element selector -- two specificity "units" -- which is more than the
+   one unit `.add-item-form` (a single class selector) had, so `.app
+   button`-family rules started outranking overrides that used to win.
+   `:where(.app) button` matches the identical set of elements, but
+   `:where(...)` is specifically defined to always count as zero
+   specificity -- so the rule's rank is exactly what plain `button` would
+   have been, and every existing override keeps its old priority untouched.
+2. Once an item is reviewed or skipped, `nextReviewDate` moves past today,
+   so it drops out of `GET /items/due`'s result -- the due list only ever
+   shows what's *still* outstanding, not what was outstanding originally.
+   But the scheduler rejects early reviews/skips (an item can't be resolved
+   before it's due), so anything with today's date in a `Review` row was
+   genuinely due today, not leftover from earlier. That means "still due" +
+   "resolved today" can't double-count or miss anything -- together they
+   are exactly the original set, reconstructed from two numbers that are
+   each real right now, without ever having stored the total anywhere.
+3. Because `GET /items/due` filters on `nextReviewDate <= today`, not
+   `nextReviewDate == today` -- it deliberately includes overdue backlog
+   from previous days so nothing falls through the cracks. Calling that
+   number "due today" would imply it's only what newly became due this
+   morning, which overstates how much is actually new; "workload" doesn't
+   make that claim and stays accurate either way.
+
+## 2026-07-25 — Frontend redesign: two more native-element bugs, then handover prep
+
+Caught from a screenshot the user sent of the dark-mode header, not from
+reading the code -- second time a visual check found something code review
+wouldn't have (see the CSS-specificity bug two steps ago for the first).
+
+**What was found and fixed**
+- The "← Back" link on the history page rendered in native browser
+  link-purple (visited-link color), not the Almanac mute/gold colors,
+  because it only had a `hover:` class and no explicit *default* text
+  color -- anchors don't inherit color from a parent by default (the
+  browser's own stylesheet sets it directly on the element, which beats
+  inheritance). Fixed by adding `text-almanac-mute` alongside the existing
+  `hover:text-almanac-accent`.
+- Same root cause, second spot: Dashboard's new "Review history" nav link
+  (a `<Link>`, i.e. an `<a>`) used `className="link"`, expecting
+  `App.css`'s existing link styling -- but that rule was written as
+  `button.link` (requires the element to *be* a button), so a plain `<a
+  className="link">` matched nothing and fell back to native purple too.
+  Generalized the CSS selector from `button.link` to `.link` so it covers
+  both.
+- While verifying the fix, spotted a related issue in the same screenshot:
+  the year-switcher arrow buttons showed native gray button chrome (a
+  visible box/border), because they only had a `hover:` text-color class
+  and nothing resetting the browser's default button appearance. Added
+  `bg-transparent border-0 p-0` to both.
+
+**Key decision and why**
+- **All three bugs share one root cause, now written down as a standing
+  gotcha** (see `developer-handover.md` §10a): skipping Tailwind's
+  Preflight (kept the old screens safe, per the earlier decision) means
+  the new page gets *zero* CSS reset. Every native element keeps its raw
+  browser default unless a class explicitly overrides it -- a `hover:`-only
+  class on an `<a>` or `<button>` is a reliable smell for "this element's
+  base/unstyled state was never set." Logged as an explicit pattern to
+  watch for, not just three isolated fixes, since a next session adding
+  more native elements (inputs, selects) will hit the same thing.
+
+**Handover decision**
+- Updated `developer-handover.md` §10 to split into **§10a (built: infra +
+  history page, with the gotchas above)** and **§10b (not yet built:
+  restyling Dashboard/AuthForm/ItemDetail/AdminPanel + revisiting their
+  user flow/UX)** -- confirmed with the user that §10b is the next phase,
+  and that it needs its own design-lock pass first, the same process this
+  session used for the history page, not a straight port of one screen's
+  tokens onto four different screens' layouts.
+
+**You should be able to explain**
+1. Why did the "← Back" link need an explicit `text-almanac-mute` class
+   when it's nested inside a `<span>` that already has
+   `text-almanac-mute` on it -- shouldn't color just inherit down?
+2. Why did generalizing `button.link` to `.link` fix the Dashboard nav
+   link without needing a separate rule just for `<a>` tags?
+
+**Answers (auto-logged, not gating on a reply):**
+1. CSS inheritance only fills in a property when nothing more specific sets
+   it. Browsers ship their own default stylesheet rule that sets a color
+   directly on `<a>` elements (blue for unvisited, purple for visited) --
+   that's not "no color set," it's an explicit rule on the element itself,
+   which always beats an inherited value from a parent, however specific
+   the parent's own selector was. The `<span>`'s `text-almanac-mute` reaches
+   plain text nodes fine; it never reaches the link's own color, because
+   the link has its own rule already.
+2. `.link` matches on class alone, regardless of which element carries that
+   class -- `button.link` matches only when the element is *literally* a
+   `<button>` with that class. `<Link>` from react-router renders an `<a>`,
+   never a `<button>`, so `button.link` could never match it no matter what
+   className was passed. Dropping the `button` part from the selector was
+   the whole fix; nothing else needed to change.
+
+## 2026-07-25 — Frontend redesign: the `:visited` link color, and a real verification limit
+
+The user reported the "← Back" link still showing native visited-link
+purple *after* the previous fix (which added a base `text-almanac-mute`
+color) -- with a fresh screenshot from their own everyday browser, not
+this session's automated one. Also asked to drop the underline, and to
+lock in "follow the device's light/dark preference by default" as an
+explicit rule for the redesign, not just an accidental side effect of how
+the state happened to be written.
+
+**What was found and fixed**
+- `<a>` elements carry the browser's own `:link`/`:visited` color rules.
+  A plain `.text-almanac-mute` class (no pseudo-class) *should* still win
+  over those under normal cascade rules (author styles beat user-agent
+  defaults regardless of specificity) -- but rather than trust that
+  reasoning against a real, reported mismatch, the more robust fix is to
+  target `:visited` explicitly: added `visited:text-almanac-mute` alongside
+  the existing `text-almanac-mute` and `hover:text-almanac-accent`, plus
+  `no-underline` (the second, separate ask).
+- Locked "default to the device's OS light/dark preference; the in-page
+  toggle is a manual override" into `developer-handover.md` §10a as an
+  explicit rule for the *whole* redesign, not just this page. It already
+  worked this way by construction (`mode` state starts `null`, so CSS falls
+  through to `@media (prefers-color-scheme)` until the toggle sets an
+  explicit value) -- writing it down turns "how it happens to behave" into
+  "a decision a future screen must also follow."
+
+**A real tool limitation, surfaced rather than glossed over**
+- Tried to verify the fix by reading `getComputedStyle(link).color` and
+  `document.querySelectorAll('a:visited').length` from this session's
+  automated browser. Both came back looking "clean" (`length: 0`,
+  computed color matching the intended unvisited value) -- but that's not
+  proof of anything: browsers *deliberately* make `:visited` invisible to
+  JavaScript (`getComputedStyle` is specified to always report as if
+  unvisited, and `:visited` never matches via script), specifically so a
+  page can't sniff a user's browsing history through CSS. On top of that,
+  this session's automated browser almost certainly has no real,
+  accumulated navigation history the way the user's actual daily browser
+  does, so the bug may never even be reproducible here. Conclusion, stated
+  plainly rather than re-claimed as fixed: **this class of bug cannot be
+  verified by this session's tooling at all** -- the explicit
+  `visited:text-almanac-mute` fix is the theoretically correct move
+  regardless, but confirming it worked requires the user to check in their
+  own browser, not another "confirmed in Playwright" claim.
+
+**New concepts introduced**
+- **`:visited` is a privacy-walled pseudo-class.** Unlike every other
+  pseudo-class (`:hover`, `:focus`, `:disabled`...), browsers restrict what
+  CSS properties `:visited` may change (color-related properties only, no
+  layout-affecting ones) *and* hide its actual matching/computed state from
+  JavaScript entirely. This is a deliberate, standardized privacy
+  protection against "history sniffing" attacks (a page checking, per link,
+  whether you've visited a given URL) -- not a bug or an oversight in any
+  browser.
+- **Not every visual bug is verifiable by this session's own automated
+  browser check.** A screenshot from Playwright proves what Playwright's
+  browser renders, in Playwright's browser state (no real history, a fresh
+  profile) -- it does not prove what the user's own browser, with its own
+  real history and settings, will show. Worth remembering as a general
+  limit, not just for this one bug.
+
+**You should be able to explain**
+1. Why couldn't `document.querySelectorAll('a:visited').length` be trusted
+   as proof that the link wasn't visited, even though it returned `0`?
+2. Why does "default to OS preference, toggle overrides it" need to be
+   written down as a rule, if the code already happened to behave that way?
+
+**Answers (auto-logged, not gating on a reply):**
+1. Browsers deliberately make `:visited` unobservable from script, as a
+   privacy protection -- `:visited` is defined to never match through
+   `querySelectorAll`/`matches()`/etc., regardless of the link's real
+   visited state, precisely so a page can't use CSS + JS together to detect
+   which of a list of URLs the user has actually visited. A `0` result is
+   consistent with "not visited" and *also* consistent with "visited, but
+   JS isn't allowed to see it" -- it can't distinguish the two.
+2. Because "it happens to work" and "it's guaranteed to keep working" are
+   different things. Without writing it down, a future session restyling
+   Dashboard/AuthForm/etc. has no way to know this was an intentional
+   product decision rather than an accident of how the `mode` state
+   variable was initialized -- it could easily default a new screen to a
+   fixed theme instead, technically matching "the redesign," while quietly
+   breaking a rule nobody documented.
