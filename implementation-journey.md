@@ -1155,3 +1155,118 @@ the state happened to be written.
    variable was initialized -- it could easily default a new screen to a
    fixed theme instead, technically matching "the redesign," while quietly
    breaking a rule nobody documented.
+
+## 2026-07-30 — Instructor's final-project checklist: gap analysis + general rate limiting
+
+**What happened**
+The course instructor shared a PDF checklist of what the final project is
+graded on: 5 sections (API design, security, database, performance/
+resilience, DevOps), 14 items total. Went through the actual code
+(grepping, not guessing from memory) to check each item off against what's
+really built.
+
+**Already satisfied, no new work:** clean layered structure + `/api/v1`
+versioning, request validation/DTOs, Swagger docs at `/api/v1/docs`, CORS
+allowlist, JWT + bcrypt auth, USER/ADMIN roles with an admin panel, Prisma
+as the ORM, migrations + a seed script, database indexes, and the Redis-
+backed email queue (built a week ago).
+
+**Real gaps found, in priority order:**
+1. General API rate limiting -- only `/auth/login` and `/auth/register`
+   were protected; nothing stopped someone hammering every other endpoint.
+2. DB connection pooling -- no explicit pool settings, just Prisma's
+   defaults.
+3. Resilient caching -- Redis exists (for the email queue) but nothing
+   falls back to a cache when a database read fails.
+4. Feature flags -- none exist anywhere in the app.
+5. Full containerization -- the Dockerfile only builds the background
+   worker; the web API itself isn't in `docker-compose.yml` at all (it
+   deploys to Vercel instead). The checklist wants API + database + Redis
+   + worker all wired together in one compose file.
+
+One item -- "API backward compatibility" (supporting deprecated endpoints,
+version fallback) -- was set aside as not worth building yet: there's only
+ever been a v1 of this API, so there's no prior contract to stay
+compatible with. Nothing to build until a v2 exists.
+
+Picked gap #1 (rate limiting) to build first -- smallest, fastest, and it
+closes an actual security hole (an unauthenticated attacker could currently
+hit `/items` or any other route as fast as their network allows).
+
+**What was built**
+A new `src/middleware/generalRateLimit.js`, sitting alongside the existing
+`authRateLimit.js` (which only covers login/register). It allows 100
+requests per minute, and returns the same `429` JSON error shape the rest
+of the API already uses (`{ error: { message, code: 'RATE_LIMITED' } }`)
+rather than express-rate-limit's default plain-text response, so a client
+handling API errors doesn't need a special case for this one.
+
+Wired into `src/app.js` as one line, applied globally right after the body
+parser -- before the route mounts, before Swagger docs, before the health
+check. Every request shares the same 100/min budget. The stricter
+login/register limiter still applies underneath it unchanged -- a login
+attempt now has to clear both budgets, which is fine, since the auth
+limiter's ceiling (10 per 15 min) is far tighter anyway.
+
+**Why one middleware file, not folding it into `authRateLimit.js`**
+Two small, separate files, each named for what it guards, matches how the
+codebase already does it (`authRateLimit.js` for one route pair). Building
+a shared "rate limiter factory" for just two call sites would be an
+abstraction with no second real use case yet -- more code to explain for
+no present benefit.
+
+**Why 100 req/min per IP, not per logged-in user**
+The checklist's own example is "100 req/min per IP/user" -- either
+satisfies it. Limiting by IP is what express-rate-limit does out of the
+box (no extra code), and it protects unauthenticated routes too (`/auth/
+register`, the health check, Swagger docs) which a per-user key couldn't,
+since there's no logged-in user yet on those requests.
+
+**How it was verified**
+Started the real server and fired 105 requests at `/api/v1/health` in a
+loop with `curl`. Result: the first 100 came back `200`, the next 5 came
+back `429` -- the limit trips exactly where configured. Also re-ran the
+full test suite (19 tests) to confirm nothing broke -- they're pure unit
+tests against service functions with no HTTP layer, so they were never
+going to be affected, but worth checking anyway rather than assuming.
+
+**New concepts introduced**
+- **Rate limiting.** A middleware that counts requests from the same
+  source (by default, IP address) within a rolling time window, and starts
+  rejecting them with `429 Too Many Requests` once a limit is hit. Its job
+  is to blunt abuse -- a script hammering the API, or a brute-force attempt
+  guessing passwords -- without needing to know *why* the requests are
+  happening.
+- **Layered rate limits.** Nothing stops two rate limiters from applying to
+  the same request. Here, every request pays into a loose global budget
+  (100/min), and login/register additionally pay into a much stricter one
+  (10/15min). The stricter one will always trip first for its own routes;
+  the general one is the backstop for everything else.
+- **`windowMs` / `limit`.** The two knobs express-rate-limit runs on: how
+  wide the rolling time window is (`windowMs`, in milliseconds) and how
+  many requests are allowed inside it (`limit`) before the `handler`
+  (here, a `429` + the app's standard error JSON) takes over.
+
+**You should be able to explain**
+1. Why does the login/register limiter (10 per 15 min) still make sense to
+   keep, now that there's also a general 100-per-minute limit on
+   everything?
+2. Why key the general limiter by IP address instead of by user ID, given
+   the checklist allowed either?
+
+**Answers (auto-logged, not gating on a reply):**
+1. Because the two limits are protecting against different things. The
+   general limiter's job is blunting generic API abuse -- scraping,
+   accidental infinite loops, a misbehaving client -- at a volume too high
+   for any real user to hit by accident. The login/register limiter exists
+   specifically to slow down *password-guessing*: at 100 attempts a
+   minute, an attacker could still try 1,500 passwords in 15 minutes before
+   the general limit even noticed. The tight 10-per-15-min ceiling is what
+   actually makes brute-forcing impractical; the general limit alone
+   wouldn't.
+2. A per-user key requires knowing who the user is, which requires them to
+   already be authenticated -- but the routes most worth protecting from
+   abuse (`/auth/register`, `/auth/login`, the health check, the public
+   Swagger docs) have no logged-in user yet by definition. Keying by IP
+   works before, during, and after authentication, with zero extra code,
+   since it's express-rate-limit's default behavior.

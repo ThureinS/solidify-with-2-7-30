@@ -11,6 +11,7 @@ const itemsRoutes = require('./routes/items.routes');
 const adminRoutes = require('./routes/admin.routes');
 const exportRoutes = require('./routes/export.routes');
 const redis = require('./lib/redis');
+const generalRateLimit = require('./middleware/generalRateLimit');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const openapiDocument = yaml.load(fs.readFileSync(path.join(__dirname, '../openapi.yaml'), 'utf8'));
@@ -42,6 +43,7 @@ app.use(cors({ origin: allowedOrigins }));
 
 app.use(morgan('dev'));
 app.use(express.json({ limit: '64kb' }));
+app.use(generalRateLimit);
 
 // Swagger UI renders inline <script>/<style> tags that helmet's default
 // Content-Security-Policy would block. Mounted before the global helmet()
