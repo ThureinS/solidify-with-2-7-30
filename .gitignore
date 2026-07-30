@@ -1,5 +1,9 @@
 node_modules/
-.env
+# Every .env variant, not just the exact name ".env" -- a prod env file
+# (Neon's direct connection string, `vercel env pull` output) must never be
+# committable. The example file is the one deliberate exception.
+.env*
+!.env.example
 .DS_Store
 learning.md
 .playwright-mcp/
