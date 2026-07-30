@@ -25,16 +25,22 @@ for the architecture overview, data model, and current-state summary.
 
 Node.js + Express, PostgreSQL via Prisma, JWT auth (bcrypt password
 hashing), Zod validation, Vitest for the scheduling-logic tests, Docker
-Compose for local Postgres, GitHub Actions for CI.
+Compose for the full local stack (Postgres, Redis, API, worker), GitHub
+Actions for CI.
 
 **Bonus: a background email queue** (BullMQ + Redis + nodemailer) sends a
-welcome email when a user registers. The API stays a plain serverless-style
-Express app; the queue's consumer (`worker.js`) is the one piece of this repo
-that runs in its own Docker container (see `Dockerfile`), because a queue
-consumer has to run forever listening for jobs -- something a serverless
-function fundamentally can't do. The API (producer) and worker (consumer)
-never talk to each other directly, only through Redis. See
-`implementation-journey.md` for the full build story.
+welcome email when a user registers. The API and worker never talk to each
+other directly, only through Redis. See `implementation-journey.md` for the
+full build story.
+
+`Dockerfile` is multi-stage with two independent final targets -- `api` and
+`worker` (`docker-compose.yml` builds each via `build.target`) -- so both can
+run fully containerized locally, alongside Postgres and Redis, without a
+host Node install at all. In production the API still deploys to Vercel as
+a plain serverless-style Express app (see "Deploying" below); the worker is
+the one piece that *has* to run somewhere long-lived, since a queue
+consumer listens forever and serverless functions fundamentally can't do
+that.
 
 A React (Vite) frontend covering every one of the 14 backend endpoints
 (auth, items CRUD, due/review/skip, export, admin panel) lives in
@@ -44,15 +50,30 @@ CI/deploy. See its README for how to run it.
 
 ## Running locally
 
+Two ways to run the API locally -- pick one, don't run both at once (they'd
+fight over port 3000):
+
+**Dev mode** (hot reload via `nodemon`, recommended while iterating):
+
 ```bash
 cp .env.example .env          # then set JWT_SECRET to a random string, e.g.:
                                # node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-docker compose up -d          # starts local Postgres, Redis, and the email worker
-npx prisma migrate deploy     # applies the committed migrations
-npm run seed                  # creates demo@example.com / Demo1234 (USER)
-                               # and admin@example.com / Admin1234 (ADMIN)
-npm run dev                   # starts the server on :3000
-npm test                      # runs the scheduling unit tests
+docker compose up -d db redis worker   # local Postgres, Redis, and the email worker
+npx prisma migrate deploy              # applies the committed migrations
+npm run seed                           # creates demo@example.com / Demo1234 (USER)
+                                        # and admin@example.com / Admin1234 (ADMIN)
+npm run dev                            # starts the server on :3000, restarts on file changes
+npm test                               # runs the scheduling unit tests
+```
+
+**Full Docker mode** (API, Postgres, Redis, and the worker all containerized,
+no host Node process for the API -- closer to how it'd run in production):
+
+```bash
+cp .env.example .env          # same as above
+docker compose up -d          # builds + starts db, redis, api, and worker
+npx prisma migrate deploy     # run from the host -- Postgres's port is still published
+npm run seed
 ```
 
 API docs (Swagger UI, every endpoint with an example): `GET /api/v1/docs`.

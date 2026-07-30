@@ -1438,3 +1438,77 @@ running instance has which value.
 **You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
 1. The first test run showed identical behavior for flag-on and flag-off.
    What made that result untrustworthy, and what changed to fix it?
+
+## 2026-07-30 — Instructor checklist gap #5: full containerized deployment (all 5 gaps now closed)
+
+**What was built**
+`Dockerfile` is now one multi-stage file with two independent final
+targets: `worker` (unchanged behavior from before -- minimal install, no
+Prisma) and a new `api` target for the actual Express server. `api`'s
+build installs full dependencies once (a `deps` stage) so `prisma
+generate`'s postinstall script can run against the real schema *inside*
+the Alpine image -- producing a client built for the container's own
+platform, not copied from whatever generated it on the host -- then
+reinstalls production-only dependencies in the final stage and copies just
+the generated `@prisma/client`/`.prisma` folders over. `docker-compose.yml`
+gained an `api` service (`build.target: api`, publishes `3000:3000`,
+`DATABASE_URL`/`REDIS_URL` overridden to the compose network's service
+names) alongside the existing `db`, `redis`, and `worker`. `docker compose
+up -d` now brings up the entire stack the checklist asks for.
+
+**How it was verified, and a real obstacle hit along the way**
+Built both images (`docker compose build api worker`) -- `prisma generate`
+ran successfully inside the container during the build, confirming the
+multi-stage Prisma setup actually works, not just parses. Bringing up the
+full stack with `docker compose up -d db redis api worker` hit a real
+snag: the `api` container failed to start because host port 3000 was
+already taken -- by that same stray leftover `nodemon` process from the
+feature-flag testing earlier, still running. Stopping that process needed
+a `kill`, which this session's own safety guardrails correctly declined
+to run without asking first (it's not a process this session started, and
+killing an arbitrary host process on someone's request isn't something to
+just push through). Rather than pause the whole verification on that,
+found a path that didn't need permission or touch that process at all:
+ran the already-built `api` image directly with `docker run` on an
+alternate host port (3002), attached to the same compose network so it
+could still reach the real `db` and `redis` containers. That's a fully
+faithful test of the actual deliverable (the `api` Docker image); the port
+number is just how a human reaches it from outside, not part of what was
+being verified. Result: `GET /health` returned `{"status":"ok","redis":"up"}`,
+a real login returned a valid JWT, and `GET /items/due` (today's earlier
+cache-fallback work) returned real due items -- all through the
+containerized app talking to containerized Postgres and Redis. Confirmed
+the `worker` container was also `Up` throughout. Tore everything down
+(including the temporary verification container) afterward, then reran
+`npm test` -- still 19/19 -- and updated `README.md`'s "Running locally"
+section to document both a hot-reload dev mode (`npm run dev`, unchanged)
+and this new fully-containerized mode, explicitly warning they'd collide
+on port 3000 if run at the same time.
+
+**Why a `docker run` workaround instead of just asking to kill the process**
+Could have paused here and asked outright. Chose not to because there was
+a way to get an equally strong verification result without needing that
+permission at all -- the actual thing under test (does the `api` Docker
+image work correctly against real Postgres/Redis) doesn't care which host
+port a human later maps it to. Worth noticing as a general instinct: when
+blocked on a permission, check whether the *goal* actually requires the
+blocked action, or whether it was just the first path tried.
+
+**New concepts introduced**
+- **Multi-stage builds with more than one final target.** A single
+  `Dockerfile` can define several independent "final" stages (here,
+  `worker` and `api`), each producing its own separate image, selected at
+  build time via `--target` (or, in Compose, `build.target`). They can
+  still share earlier stages (`deps`) via `COPY --from=<stage>` without
+  needing separate Dockerfiles.
+- **Why `prisma generate` has to run *inside* the target platform.** The
+  generated Prisma client can include platform/libc-specific pieces
+  (Alpine uses `musl`, most laptops use `glibc`). Running `prisma
+  generate` on the host and copying the result into an Alpine image risks
+  shipping a client built for the wrong platform; running it inside a
+  build stage based on the *same* image (`node:20-alpine`) guarantees a
+  match.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. Why did the `api` build need a separate `deps` stage instead of just
+   running `npm ci` once in the final `api` stage directly?

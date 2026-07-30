@@ -19,8 +19,27 @@ services:
     volumes:
       - redis_data:/data
 
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      # .env's DATABASE_URL/REDIS_URL point at localhost, which is wrong
+      # inside the compose network -- override them to the service names.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/spaced_repetition
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - db
+      - redis
+
   worker:
-    build: .
+    build:
+      context: .
+      target: worker
     restart: unless-stopped
     env_file: .env
     environment:
