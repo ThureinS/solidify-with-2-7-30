@@ -70,6 +70,32 @@
   accent-color: var(--color-accent);
 }
 
+.goal-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.goal-row label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.goal-input {
+  width: 4rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.goal-row progress {
+  flex: 1;
+  min-width: 120px;
+  height: 0.6rem;
+  accent-color: var(--color-accent);
+}
+
 :where(.app) input,
 :where(.app) select,
 :where(.app) textarea {
@@ -166,6 +192,12 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+}
+
+.dashboard-header-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .tabs {

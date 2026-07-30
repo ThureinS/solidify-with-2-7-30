@@ -96,9 +96,14 @@ async function skipItem(req, res, next) {
 
 async function reviewHistory(req, res, next) {
   try {
-    const year = req.validatedQuery.year ?? new Date().getFullYear();
+    const { year: queryYear, date } = req.validatedQuery;
+    const year = queryYear ?? new Date().getFullYear();
     const days = await itemsService.getReviewHistory(req.userId, year);
-    res.json({ year, days });
+    // currentStreak only means anything with a real "today" to anchor it --
+    // omit it for callers that don't pass one, rather than silently
+    // defaulting to the server clock (see reviewHistoryQuerySchema).
+    const currentStreak = date ? await itemsService.getCurrentStreak(req.userId, date) : undefined;
+    res.json({ year, days, currentStreak });
   } catch (err) {
     next(err);
   }

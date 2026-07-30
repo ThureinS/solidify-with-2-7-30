@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma');
 const { AppError } = require('../middleware/errorHandler');
-const { parseDate, addDays } = require('../lib/dates');
+const { parseDate, addDays, toDateString } = require('../lib/dates');
 const schedule = require('./schedule.service');
 
 const FIRST_REVIEW_OFFSET_DAYS = 2;
@@ -127,6 +127,44 @@ async function getReviewHistory(userId, year) {
   return deriveReviewHistory(grouped);
 }
 
+// Pure: counts consecutive active days walking back from `today`. If today
+// has no activity yet, the streak isn't broken until the day actually ends
+// -- it counts back from yesterday instead, so reviewing later today still
+// extends it. `activeDates` must be distinct date strings, any order.
+//
+// "Active" means any Review row, REVIEWED or SKIPPED -- a skip-only day keeps
+// the streak alive, because the streak measures showing up, and this app
+// treats skipping as a legitimate scheduling action (see the history page's
+// copy). Note this is deliberately a different question from the completion
+// rate, which counts skips on the negative side: the streak asks "did you
+// open the app?", completion asks "did you get through it?". Two honest
+// answers, not a contradiction.
+function deriveStreak(activeDates, today) {
+  const active = new Set(activeDates);
+  let anchor = active.has(today) ? parseDate(today) : addDays(parseDate(today), -1);
+  let streak = 0;
+  while (active.has(toDateString(anchor))) {
+    streak += 1;
+    anchor = addDays(anchor, -1);
+  }
+  return streak;
+}
+
+// All-time on purpose, unlike getReviewHistory's year scope -- a streak that
+// reset every January 1st for crossing a year boundary would just be wrong.
+// groupBy, not findMany + distinct: Prisma's `distinct` dedupes client-side
+// (it fetches every matching row first), groupBy emits a real SQL GROUP BY.
+// ponytail: no date lower bound, so rows grow with the account's lifetime --
+// add `date: { gte: today - ~400d }` if that ever matters, accepting that a
+// streak longer than the window would then undercount.
+async function getCurrentStreak(userId, today) {
+  const rows = await prisma.review.groupBy({
+    by: ['date'],
+    where: { item: { userId, deletedAt: null } },
+  });
+  return deriveStreak(rows.map((r) => toDateString(r.date)), today);
+}
+
 module.exports = {
   createItem,
   listItems,
@@ -138,4 +176,6 @@ module.exports = {
   skipItem,
   getReviewHistory,
   deriveReviewHistory,
+  getCurrentStreak,
+  deriveStreak,
 };

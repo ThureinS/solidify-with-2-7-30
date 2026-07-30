@@ -47,8 +47,11 @@ export function getDueItems(token) {
   return request(`/items/due?date=${todayLocal()}`, { token });
 }
 
-export function getReviewHistory(token, year) {
-  return request(`/items/review-history?year=${year}`, { token });
+// date anchors the response's currentStreak (see reviewHistoryQuerySchema on
+// the backend) -- omit it and the server just won't include that field.
+export function getReviewHistory(token, year, date) {
+  const dateParam = date ? `&date=${date}` : '';
+  return request(`/items/review-history?year=${year}${dateParam}`, { token });
 }
 
 export function listItems(token, { status = 'active', page = 1 } = {}) {

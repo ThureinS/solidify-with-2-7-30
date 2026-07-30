@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createItem, exportData, getDueItems, listItems, reviewItem, skipItem, todayLocal } from './api';
+import {
+  createItem,
+  exportData,
+  getDueItems,
+  getReviewHistory,
+  listItems,
+  reviewItem,
+  skipItem,
+  todayLocal,
+} from './api';
 import ItemDetail from './ItemDetail';
 import AdminPanel from './AdminPanel';
 import Pagination from './Pagination';
@@ -21,7 +30,56 @@ export default function Dashboard({ token, user, onLogout }) {
   const [selectedId, setSelectedId] = useState(null);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [completionRate, setCompletionRate] = useState(null); // null while loading / no data yet
+  const [streak, setStreak] = useState(null);
+  const [handledToday, setHandledToday] = useState(0);
+  const goalKey = `dailyGoal:${user?.id ?? 'anon'}`;
+  const [dailyGoal, setDailyGoal] = useState(0);
   const limit = 20;
+
+  // user loads asynchronously (starts null, see App.jsx's getMe effect), so
+  // goalKey isn't known yet on the first render -- read localStorage here
+  // once the real id shows up, rather than in useState's one-shot initializer.
+  useEffect(() => {
+    if (user?.id) setDailyGoal(Number(localStorage.getItem(goalKey)) || 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Re-run after every review/skip, not just on mount: all three numbers come
+  // from this one endpoint, so refetching is simpler than nudging each stat by
+  // hand -- and it can't drift. (Bumping the streak locally would be wrong
+  // anyway: if today was already active at load, the server's number already
+  // counts today, so a local +1 would sometimes double-count.)
+  async function refreshStats() {
+    const today = todayLocal();
+    try {
+      const history = await getReviewHistory(token, Number(today.slice(0, 4)), today);
+      let reviewed = 0;
+      let skipped = 0;
+      for (const day of history.days) {
+        reviewed += day.reviewCount;
+        skipped += day.skipCount;
+      }
+      setCompletionRate(reviewed + skipped === 0 ? null : Math.round((100 * reviewed) / (reviewed + skipped)));
+      setStreak(history.currentStreak);
+      const todayEntry = history.days.find((d) => d.date === today);
+      setHandledToday((todayEntry?.reviewCount ?? 0) + (todayEntry?.skipCount ?? 0));
+    } catch {
+      // a stat row failing silently isn't worth surfacing as a page error
+    }
+  }
+
+  useEffect(() => {
+    refreshStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  function handleGoalChange(e) {
+    const value = Math.max(0, Number(e.target.value) || 0);
+    setDailyGoal(value);
+    if (value) localStorage.setItem(goalKey, String(value));
+    else localStorage.removeItem(goalKey);
+  }
 
   async function refreshDueItems() {
     try {
@@ -69,7 +127,7 @@ export default function Dashboard({ token, user, onLogout }) {
   async function handleReview(itemId) {
     try {
       await reviewItem(token, itemId);
-      await refreshDueItems();
+      await Promise.all([refreshDueItems(), refreshStats()]);
     } catch (err) {
       setError(err.message);
     }
@@ -78,7 +136,7 @@ export default function Dashboard({ token, user, onLogout }) {
   async function handleSkip(itemId) {
     try {
       await skipItem(token, itemId);
-      await refreshDueItems();
+      await Promise.all([refreshDueItems(), refreshStats()]);
     } catch (err) {
       setError(err.message);
     }
@@ -120,14 +178,60 @@ export default function Dashboard({ token, user, onLogout }) {
   return (
     <div>
       <header className="dashboard-header">
-        <h1>{view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}</h1>
-        <Link to="/history" className="link">
-          Review history
-        </Link>
-        <button type="button" className="link" onClick={onLogout}>
-          Log out
-        </button>
+        <div>
+          <h1>{view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}</h1>
+          <span className="stage-label">
+            {dueItems.length} due today
+            {completionRate !== null && ` · ${completionRate}% completion this year`}
+            {!!streak && (
+              <span title="Any day you reviewed or skipped something keeps the streak going.">
+                {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="dashboard-header-links">
+          <Link to="/history" className="link">
+            Review history
+          </Link>
+          <button type="button" className="link" onClick={onLogout}>
+            Log out
+          </button>
+        </div>
       </header>
+
+      {/* Hidden until we know who we are: goalKey needs the real user id, so a
+          goal typed while /auth/me is still in flight -- or while it's failing
+          with a 5xx, which App.jsx keeps the session alive through -- would save
+          under 'dailyGoal:anon' and silently vanish on the next good load. */}
+      {user?.id && (
+        <div className="goal-row">
+          <label>
+            Daily goal
+            <input
+              type="number"
+              min="0"
+              step="1"
+              className="goal-input"
+              value={dailyGoal || ''}
+              onChange={handleGoalChange}
+              placeholder="off"
+            />
+          </label>
+          {dailyGoal > 0 && (
+            <>
+              <progress
+                value={Math.min(handledToday, dailyGoal)}
+                max={dailyGoal}
+                aria-label="Daily goal progress"
+              />
+              <span className="stage-label">
+                {handledToday} / {dailyGoal}
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="tabs">
         <button
