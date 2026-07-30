@@ -10,7 +10,7 @@
    Tailwind-styled pages, which reuse the same HTML elements (button, h1,
    ...) with their own look. :where() contributes zero specificity, so this
    scoping doesn't change how these rules rank against the more specific
-   overrides below (e.g. .add-item-form) -- only ".app" as a bare class
+   overrides below (e.g. button.secondary) -- only ".app" as a bare class
    selector would have, by adding an extra type-selector's worth of weight. */
 :where(.app) h1 {
   font-size: 1.75rem;
@@ -32,68 +32,6 @@
   gap: 0.4rem;
   font-size: 0.9rem;
   color: var(--color-text-muted);
-}
-
-.status-filter {
-  margin-bottom: 1.5rem;
-  max-width: 220px;
-}
-
-.all-toolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.export-controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem; /* match .status-filter so the list starts level below both */
-}
-
-/* Override the column-stacked global label for an inline checkbox + text */
-.export-controls label {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text);
-}
-
-/* Global input padding is for text fields; a checkbox needs to stay small */
-.export-controls input[type='checkbox'] {
-  width: 1rem;
-  height: 1rem;
-  padding: 0;
-  accent-color: var(--color-accent);
-}
-
-.goal-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.goal-row label {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.goal-input {
-  width: 4rem;
-  padding: 0.4rem 0.6rem;
-}
-
-.goal-row progress {
-  flex: 1;
-  min-width: 120px;
-  height: 0.6rem;
-  accent-color: var(--color-accent);
 }
 
 :where(.app) input,
@@ -187,54 +125,6 @@
   color: var(--color-success);
 }
 
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.dashboard-header-links {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.tabs {
-  display: flex;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.tabs button {
-  background: none;
-  color: var(--color-accent);
-  font-weight: 600;
-  padding: 0.6rem 0.1rem;
-  border-radius: 0;
-  border-bottom: 2px solid var(--color-accent);
-}
-
-.tabs button.secondary {
-  color: var(--color-text-muted);
-  font-weight: 500;
-  border: none;
-  border-bottom: 2px solid transparent;
-}
-
-.tabs button:hover:not(:disabled) {
-  background: none;
-}
-
-.add-item-form {
-  flex-direction: row;
-}
-
-.add-item-form input {
-  flex: 1;
-}
-
 .due-list {
   list-style: none;
   padding: 0;
@@ -274,38 +164,6 @@
 .item-actions button {
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1rem;
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
-}
-
-.pagination button {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.pagination button:hover:not(:disabled) {
-  background: var(--color-bg);
-}
-
-.due-list li.clickable {
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-
-.due-list li.clickable:hover,
-.due-list li.clickable:focus-visible {
-  border-color: var(--color-accent);
-  outline: none;
 }
 
 .item-text {

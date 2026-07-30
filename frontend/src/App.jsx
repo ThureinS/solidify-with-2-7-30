@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AuthForm from './AuthForm';
 import Dashboard from './Dashboard';
 import ReviewHistoryPage from './ReviewHistoryPage';
+import AlmanacShell from './AlmanacShell';
 import { getMe } from './api';
 import './App.css';
 
@@ -11,6 +12,19 @@ const TOKEN_KEY = 'token';
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
+  // Lives here, not on a per-page component, so it survives navigating
+  // between screens instead of resetting -- null follows the OS preference,
+  // 'light'/'dark' is an explicit override via the shell's toggle.
+  const [mode, setMode] = useState(null);
+
+  useEffect(() => {
+    if (mode) document.documentElement.setAttribute('data-mode', mode);
+    else document.documentElement.removeAttribute('data-mode');
+  }, [mode]);
+
+  function toggleMode() {
+    setMode((m) => (m === 'light' ? 'dark' : 'light'));
+  }
 
   function handleLoggedIn(newToken) {
     localStorage.setItem(TOKEN_KEY, newToken);
@@ -49,25 +63,22 @@ function App() {
 
   if (!token) {
     return (
-      <main className="app">
-        <AuthForm onLoggedIn={handleLoggedIn} />
-      </main>
+      <AlmanacShell onToggleMode={toggleMode} loggedIn={false}>
+        <div className="app">
+          <AuthForm onLoggedIn={handleLoggedIn} />
+        </div>
+      </AlmanacShell>
     );
   }
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <main className="app">
-            <Dashboard token={token} user={user} onLogout={handleLogout} />
-          </main>
-        }
-      />
-      <Route path="/history" element={<ReviewHistoryPage token={token} />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <AlmanacShell onToggleMode={toggleMode} loggedIn onLogout={handleLogout}>
+      <Routes>
+        <Route path="/" element={<Dashboard token={token} user={user} />} />
+        <Route path="/history" element={<ReviewHistoryPage token={token} />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AlmanacShell>
   );
 }
 

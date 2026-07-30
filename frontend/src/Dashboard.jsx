@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   createItem,
   exportData,
@@ -16,7 +15,16 @@ import Pagination from './Pagination';
 
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
 
-export default function Dashboard({ token, user, onLogout }) {
+const ITEM_ROW_CLASS =
+  'flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 cursor-pointer hover:border-almanac-accent';
+
+function tabClass(active) {
+  return active
+    ? 'rounded-full px-4 py-1.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border border-almanac-accent cursor-pointer'
+    : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
+}
+
+export default function Dashboard({ token, user }) {
   const [view, setView] = useState('due'); // 'due' | 'all' | 'admin'
   const [dueItems, setDueItems] = useState([]);
   const [newText, setNewText] = useState('');
@@ -165,57 +173,54 @@ export default function Dashboard({ token, user, onLogout }) {
   }
 
   if (selectedId) {
+    // ponytail: ItemDetail/AdminPanel haven't had their own Almanac pass yet
+    // (§10b, next chunks) -- this .app wrapper keeps App.css's old look
+    // working for them in the meantime. Drop it once ItemDetail is restyled.
     return (
-      <ItemDetail
-        token={token}
-        itemId={selectedId}
-        onBack={() => setSelectedId(null)}
-        onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
-      />
+      <div className="app">
+        <ItemDetail
+          token={token}
+          itemId={selectedId}
+          onBack={() => setSelectedId(null)}
+          onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
+        />
+      </div>
     );
   }
 
   return (
-    <div>
-      <header className="dashboard-header">
-        <div>
-          <h1>{view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}</h1>
-          <span className="stage-label">
-            {dueItems.length} due today
-            {completionRate !== null && ` · ${completionRate}% completion this year`}
-            {!!streak && (
-              <span title="Any day you reviewed or skipped something keeps the streak going.">
-                {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="dashboard-header-links">
-          <Link to="/history" className="link">
-            Review history
-          </Link>
-          <button type="button" className="link" onClick={onLogout}>
-            Log out
-          </button>
-        </div>
-      </header>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-display text-2xl font-medium mb-1">
+          {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}
+        </h1>
+        <span className="text-sm text-almanac-mute">
+          {dueItems.length} due today
+          {completionRate !== null && ` · ${completionRate}% completion this year`}
+          {!!streak && (
+            <span title="Any day you reviewed or skipped something keeps the streak going.">
+              {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
+            </span>
+          )}
+        </span>
+      </div>
 
       {/* Hidden until we know who we are: goalKey needs the real user id, so a
           goal typed while /auth/me is still in flight -- or while it's failing
           with a 5xx, which App.jsx keeps the session alive through -- would save
           under 'dailyGoal:anon' and silently vanish on the next good load. */}
       {user?.id && (
-        <div className="goal-row">
-          <label>
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2 text-sm text-almanac-mute">
             Daily goal
             <input
               type="number"
               min="0"
               step="1"
-              className="goal-input"
               value={dailyGoal || ''}
               onChange={handleGoalChange}
               placeholder="off"
+              className="w-16 px-2.5 py-1.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
             />
           </label>
           {dailyGoal > 0 && (
@@ -224,8 +229,9 @@ export default function Dashboard({ token, user, onLogout }) {
                 value={Math.min(handledToday, dailyGoal)}
                 max={dailyGoal}
                 aria-label="Daily goal progress"
+                className="flex-1 min-w-[120px] h-2 accent-almanac-accent"
               />
-              <span className="stage-label">
+              <span className="text-sm text-almanac-mute">
                 {handledToday} / {dailyGoal}
               </span>
             </>
@@ -233,27 +239,15 @@ export default function Dashboard({ token, user, onLogout }) {
         </div>
       )}
 
-      <div className="tabs">
-        <button
-          type="button"
-          className={view === 'due' ? '' : 'secondary'}
-          onClick={() => setView('due')}
-        >
+      <div className="flex gap-1.5">
+        <button type="button" className={tabClass(view === 'due')} onClick={() => setView('due')}>
           Due today
         </button>
-        <button
-          type="button"
-          className={view === 'all' ? '' : 'secondary'}
-          onClick={() => setView('all')}
-        >
+        <button type="button" className={tabClass(view === 'all')} onClick={() => setView('all')}>
           All items
         </button>
         {user?.role === 'ADMIN' && (
-          <button
-            type="button"
-            className={view === 'admin' ? '' : 'secondary'}
-            onClick={() => setView('admin')}
-          >
+          <button type="button" className={tabClass(view === 'admin')} onClick={() => setView('admin')}>
             Admin
           </button>
         )}
@@ -261,30 +255,35 @@ export default function Dashboard({ token, user, onLogout }) {
 
       {view !== 'admin' && (
         <>
-          <form onSubmit={handleAddItem} className="add-item-form">
+          <form onSubmit={handleAddItem} className="flex gap-2.5">
             <input
               type="text"
               placeholder="What did you learn?"
               value={newText}
               onChange={(e) => setNewText(e.target.value)}
               required
+              className="flex-1 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
             />
-            <button type="submit">Add item</button>
+            <button
+              type="submit"
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+            >
+              Add item
+            </button>
           </form>
-          {addedMessage && <p className="success">{addedMessage}</p>}
-          {error && <p className="error">{error}</p>}
+          {addedMessage && <p className="text-sm text-almanac-accent">{addedMessage}</p>}
+          {error && <p className="text-sm text-almanac-accent">{error}</p>}
         </>
       )}
 
       {view === 'due' ? (
         dueItems.length === 0 ? (
-          <p>Nothing due today.</p>
+          <p className="text-sm text-almanac-mute">Nothing due today.</p>
         ) : (
-          <ul className="due-list">
+          <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
             {dueItems.map((item) => (
               <li
                 key={item.id}
-                className="clickable"
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
@@ -296,16 +295,25 @@ export default function Dashboard({ token, user, onLogout }) {
                     setSelectedId(item.id);
                   }
                 }}
+                className={ITEM_ROW_CLASS}
               >
                 <div>
-                  <p>{item.text}</p>
-                  <span className="stage-label">{STAGE_LABELS[item.stage]}</span>
+                  <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.text}</p>
+                  <span className="text-xs text-almanac-mute">{STAGE_LABELS[item.stage]}</span>
                 </div>
-                <div className="item-actions">
-                  <button type="button" onClick={() => handleReview(item.id)}>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleReview(item.id)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                  >
                     Review
                   </button>
-                  <button type="button" className="secondary" onClick={() => handleSkip(item.id)}>
+                  <button
+                    type="button"
+                    onClick={() => handleSkip(item.id)}
+                    className="rounded-lg px-3 py-1.5 text-xs bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+                  >
                     Skip
                   </button>
                 </div>
@@ -315,8 +323,8 @@ export default function Dashboard({ token, user, onLogout }) {
         )
       ) : view === 'all' ? (
         <>
-          <div className="all-toolbar">
-            <label className="status-filter">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <label className="flex flex-col gap-1 text-xs text-almanac-mute">
               Status
               <select
                 value={statusFilter}
@@ -324,6 +332,7 @@ export default function Dashboard({ token, user, onLogout }) {
                   setPage(1);
                   setStatusFilter(e.target.value);
                 }}
+                className="px-3 py-2 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
               >
                 <option value="active">Active</option>
                 <option value="archived">Archived</option>
@@ -331,29 +340,34 @@ export default function Dashboard({ token, user, onLogout }) {
               </select>
             </label>
 
-            <div className="export-controls">
-              <label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-almanac-ink">
                 <input
                   type="checkbox"
                   checked={includeDeleted}
                   onChange={(e) => setIncludeDeleted(e.target.checked)}
+                  className="w-4 h-4 accent-almanac-accent"
                 />
                 Include deleted
               </label>
-              <button type="button" className="secondary" onClick={handleExport} disabled={exporting}>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting}
+                className="rounded-lg px-3.5 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer disabled:opacity-40 disabled:cursor-default"
+              >
                 {exporting ? 'Exporting…' : 'Download my items'}
               </button>
             </div>
           </div>
 
           {allItems.length === 0 ? (
-            <p>No items.</p>
+            <p className="text-sm text-almanac-mute">No items.</p>
           ) : (
-            <ul className="due-list">
+            <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
               {allItems.map((item) => (
                 <li
                   key={item.id}
-                  className="clickable"
                   role="button"
                   tabIndex={0}
                   onClick={() => setSelectedId(item.id)}
@@ -363,10 +377,11 @@ export default function Dashboard({ token, user, onLogout }) {
                       setSelectedId(item.id);
                     }
                   }}
+                  className={ITEM_ROW_CLASS}
                 >
                   <div>
-                    <p>{item.preview}</p>
-                    <span className="stage-label">
+                    <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.preview}</p>
+                    <span className="text-xs text-almanac-mute">
                       {item.isComplete ? 'Archived' : STAGE_LABELS[item.stage]} · next review{' '}
                       {item.nextReviewDate}
                     </span>
@@ -385,7 +400,9 @@ export default function Dashboard({ token, user, onLogout }) {
           />
         </>
       ) : (
-        <AdminPanel token={token} currentUserId={user.id} />
+        <div className="app">
+          <AdminPanel token={token} currentUserId={user.id} />
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { getDueItems, getReviewHistory, todayLocal } from './api';
 
 const MONTHS = [
@@ -27,7 +26,6 @@ export default function ReviewHistoryPage({ token }) {
   const [year, setYear] = useState(currentYear);
   const [days, setDays] = useState(null); // Map<date, {reviewCount, skipCount, state}>
   const [dueCount, setDueCount] = useState(null);
-  const [mode, setMode] = useState(null); // null = follow OS, 'light' | 'dark' = explicit
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -47,11 +45,6 @@ export default function ReviewHistoryPage({ token }) {
     };
   }, [token, year]);
 
-  useEffect(() => {
-    if (mode) document.documentElement.setAttribute('data-mode', mode);
-    else document.documentElement.removeAttribute('data-mode');
-  }, [mode]);
-
   const todayEntry = days?.get(today);
   const handledToday = (todayEntry?.reviewCount ?? 0) + (todayEntry?.skipCount ?? 0);
   // dueCount is what's still outstanding right now; adding back what's
@@ -64,100 +57,80 @@ export default function ReviewHistoryPage({ token }) {
   const monthsToShow = year === currentYear ? Number(today.slice(5, 7)) : 12;
 
   return (
-    <div className="min-h-screen bg-almanac-bg text-almanac-ink font-body transition-colors">
-      <div className="max-w-3xl mx-auto px-6 py-12 flex flex-col gap-10">
-        <header className="flex justify-between items-start gap-5 flex-wrap border-b border-almanac-border pb-7">
-          <div className="flex flex-col gap-2">
-            <span className="text-xs tracking-wider uppercase text-almanac-mute">
-              <Link
-                to="/"
-                className="text-almanac-mute visited:text-almanac-mute hover:text-almanac-accent no-underline"
-              >
-                &larr; Back
-              </Link>{' '}
-              · Review history
-            </span>
-            <h1 className="font-display text-3xl font-medium">Your review history</h1>
-            <p className="text-almanac-mute max-w-md leading-relaxed text-sm">
-              Full moon: reviewed, nothing skipped. Half moon: a skip was
-              involved that day -- skipping is a legitimate move here, not a
-              failure. Blank: no activity.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
-            className="inline-flex items-center gap-2 rounded-full border border-almanac-border bg-almanac-panel px-4 py-1.5 text-xs tracking-wide hover:border-almanac-accent"
-          >
-            &#9728; / &#9790; toggle
-          </button>
-        </header>
+    <div className="flex flex-col gap-10">
+      <header className="flex flex-col gap-2 border-b border-almanac-border pb-7">
+        <h1 className="font-display text-3xl font-medium">Your review history</h1>
+        <p className="text-almanac-mute max-w-md leading-relaxed text-sm">
+          Full moon: reviewed, nothing skipped. Half moon: a skip was
+          involved that day -- skipping is a legitimate move here, not a
+          failure. Blank: no activity.
+        </p>
+      </header>
 
-        {error && <p className="text-almanac-accent">{error}</p>}
+      {error && <p className="text-almanac-accent">{error}</p>}
 
-        <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6 flex items-center gap-6 flex-wrap">
-          <div
-            className="w-16 h-16 rounded-full border border-almanac-border flex-none transition-[box-shadow,background-color] duration-500"
-            style={moonStyle(phase)}
-          />
-          <div className="flex flex-col gap-1">
-            <span className="text-xs tracking-wider uppercase text-almanac-mute">Today</span>
-            <span className="text-xl font-medium">
-              {totalToday === null ? '...' : `${handledToday} of ${totalToday} handled`}
-            </span>
-            <span className="text-sm text-almanac-mute max-w-sm leading-relaxed">
-              Today's workload, including anything overdue -- the one number
-              on this page that's a true percentage, since it's the only day
-              we can actually count what was due.
-            </span>
+      <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6 flex items-center gap-6 flex-wrap">
+        <div
+          className="w-16 h-16 rounded-full border border-almanac-border flex-none transition-[box-shadow,background-color] duration-500"
+          style={moonStyle(phase)}
+        />
+        <div className="flex flex-col gap-1">
+          <span className="text-xs tracking-wider uppercase text-almanac-mute">Today</span>
+          <span className="text-xl font-medium">
+            {totalToday === null ? '...' : `${handledToday} of ${totalToday} handled`}
+          </span>
+          <span className="text-sm text-almanac-mute max-w-sm leading-relaxed">
+            Today's workload, including anything overdue -- the one number
+            on this page that's a true percentage, since it's the only day
+            we can actually count what was due.
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="font-display text-xl font-medium">Past months</h2>
+          <div className="flex items-center gap-3 text-sm text-almanac-mute">
+            <button
+              type="button"
+              onClick={() => setYear((y) => y - 1)}
+              className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent"
+            >
+              &larr;
+            </button>
+            <span className="tabular-nums">{year}</span>
+            <button
+              type="button"
+              onClick={() => setYear((y) => Math.min(y + 1, currentYear))}
+              disabled={year >= currentYear}
+              className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent disabled:opacity-30 disabled:cursor-default disabled:hover:text-almanac-mute"
+            >
+              &rarr;
+            </button>
           </div>
         </div>
+        <p className="text-almanac-mute text-sm mb-5 max-w-xl leading-relaxed">
+          One row per month. Hover any day for the date, review count, and
+          skip count.
+        </p>
 
-        <div>
-          <div className="flex items-baseline justify-between mb-1">
-            <h2 className="font-display text-xl font-medium">Past months</h2>
-            <div className="flex items-center gap-3 text-sm text-almanac-mute">
-              <button
-                type="button"
-                onClick={() => setYear((y) => y - 1)}
-                className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent"
-              >
-                &larr;
-              </button>
-              <span className="tabular-nums">{year}</span>
-              <button
-                type="button"
-                onClick={() => setYear((y) => Math.min(y + 1, currentYear))}
-                disabled={year >= currentYear}
-                className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent disabled:opacity-30 disabled:cursor-default disabled:hover:text-almanac-mute"
-              >
-                &rarr;
-              </button>
-            </div>
+        {days === null ? (
+          <p className="text-almanac-mute text-sm">Loading...</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {MONTHS.slice(0, monthsToShow).map((label, monthIndex) => (
+              <MonthRow key={label} label={label} year={year} monthIndex={monthIndex} days={days} />
+            ))}
           </div>
-          <p className="text-almanac-mute text-sm mb-5 max-w-xl leading-relaxed">
-            One row per month. Hover any day for the date, review count, and
-            skip count.
-          </p>
+        )}
 
-          {days === null ? (
-            <p className="text-almanac-mute text-sm">Loading...</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {MONTHS.slice(0, monthsToShow).map((label, monthIndex) => (
-                <MonthRow key={label} label={label} year={year} monthIndex={monthIndex} days={days} />
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2.5 mt-6 flex-wrap text-xs text-almanac-mute">
-            <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
-            <span>All reviewed</span>
-            <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border ml-3" style={mixedShadow} />
-            <span>Mixed (some skipped)</span>
-            <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute ml-3" />
-            <span>No activity</span>
-          </div>
+        <div className="flex items-center gap-2.5 mt-6 flex-wrap text-xs text-almanac-mute">
+          <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
+          <span>All reviewed</span>
+          <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border ml-3" style={mixedShadow} />
+          <span>Mixed (some skipped)</span>
+          <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute ml-3" />
+          <span>No activity</span>
         </div>
       </div>
     </div>
