@@ -1319,3 +1319,70 @@ for a connection to free up before giving up.
 1. Why does `connectionTimeoutMillis` matter more in a serverless
    deployment (Vercel) than it would running one long-lived server
    process?
+
+## 2026-07-30 — Instructor checklist gap #3: resilient caching (cache-on-failure)
+
+**What was built**
+`GET /items/due` (the read every review session starts with) now caches its
+own successful result in Redis (`due-items:{userId}:{date}`, 5-minute TTL).
+If the database read throws, the controller falls back to that cached copy
+instead of a `500` -- and only then, tagging the response `X-Cache:
+stale-fallback` so a client (or a future debugging session) can tell the
+difference. All in `src/controllers/items.controller.js`; no new
+dependency, reusing the same `src/lib/redis.js` client the email queue
+already uses.
+
+**An assumption that turned out wrong, caught by actually testing it**
+First verification attempt: `docker compose stop db`, then hit `/items/due`
+with a token from before the outage. Expected the cached fallback. Got a
+plain `500` instead. Traced it: `middleware/auth.js`'s `requireAuth` runs
+*before* the controller on every authenticated route, and it does its own
+database read (`prisma.user.findUnique`, to catch suspensions a stale JWT
+wouldn't know about -- documented back in Part 5). With the whole database
+down, that lookup fails first, and the request never reaches
+`listDue`'s try/catch at all.
+
+This is **not a bug in the fallback code** -- `requireAuth` failing closed
+during a total outage is the correct, deliberate behavior (a JWT alone
+can't prove a suspended user hasn't been suspended more recently than the
+token was signed). But it does mean the fallback's real reach is narrower
+than "any database problem": it only helps when the *specific* `items`
+query fails or times out while the rest of the database (including the
+`users` table `requireAuth` checks) is still reachable -- e.g. a slow
+query, a lock, a bad index, one table under load -- not a full
+"the database is completely gone" outage.
+
+Re-verified against that narrower, more honest claim instead: temporarily
+forced `listDueItems` itself to throw (reverted immediately after,
+`git checkout -- src/services/items.service.js`), left the rest of the
+database reachable, restarted the server, and re-ran the same request with
+the pre-existing token. Result: `200`, `X-Cache: stale-fallback`, the exact
+same item list from before the simulated failure. That's the scenario this
+feature actually protects against.
+
+**Why not also make `requireAuth` fail open on a DB error**
+Considered and rejected without building it: that would mean a suspended
+user could keep making authenticated requests for the length of an outage,
+which directly undoes the suspension feature from Part 5. Fixing "the
+cache-fallback's reach is narrower than I first assumed" by weakening the
+one thing standing in its way isn't a trade worth making silently -- if
+broader outage coverage matters later, that's a deliberate security-posture
+conversation to have first, not a side effect of a caching feature.
+
+**New concepts introduced**
+- **Fail open vs. fail closed.** When a dependency (here, the database) is
+  unreachable, a system can either fail *open* (let the request through
+  anyway, favoring availability) or fail *closed* (reject it, favoring
+  correctness/security). `requireAuth`'s suspension check is deliberately
+  fail-closed; the new due-items cache is a deliberate, narrow fail-open
+  exception for one specific *read*, not for authentication itself.
+- **Middleware execution order determines which failure you actually see.**
+  `requireAuth` runs before every controller on an authenticated route --
+  so any resilience logic added *inside* a controller only ever gets a
+  chance to run if everything upstream of it (parsing, auth, validation)
+  already succeeded. A DB outage can be "caught" at multiple points in the
+  chain; which one fires first determines the actual failure behavior.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. Why did killing the entire database not prove the cache-fallback works,
+   even though the fallback code itself is correct?
