@@ -1270,3 +1270,52 @@ going to be affected, but worth checking anyway rather than assuming.
    Swagger docs) have no logged-in user yet by definition. Keying by IP
    works before, during, and after authentication, with zero extra code,
    since it's express-rate-limit's default behavior.
+
+## 2026-07-30 — Instructor checklist gap #2: database connection pooling
+
+**What was built**
+Explicit pool settings in `src/lib/prisma.js`, passed straight into the
+existing `PrismaPg` adapter config (no new dependency -- `@prisma/adapter-pg`
+already wraps `pg.Pool`, which already accepts these options): `max: 10`
+(cap on simultaneous connections), `idleTimeoutMillis: 30_000` (close an
+idle connection after 30s), `connectionTimeoutMillis: 5_000` (give up
+waiting for a free connection after 5s instead of hanging forever, which is
+`pg`'s default).
+
+**Why these numbers, and why now**
+Without `connectionTimeoutMillis`, a request that can't get a pooled
+connection (because the pool is maxed out) just hangs indefinitely instead
+of failing -- bad in production, where each serverless invocation on Vercel
+can spin up its own pool against Neon's shared connection budget. Capping
+`max` at 10 per instance and giving up after 5s turns "silently hangs
+forever" into "fails fast with a 500," which is a real, if unglamorous,
+resilience improvement.
+
+**Why not build a min-connections setting too**
+`pg.Pool` (and therefore this adapter) has no "minimum pool size" concept
+at all -- only a ceiling (`max`) and a timeout for idle connections
+(`idleTimeoutMillis`). The checklist's "min/max connections" language is
+generic advice that doesn't map onto every pooling library; `pg` only
+gives you the max side of that knob.
+
+**How it was verified**
+Booted Postgres via `docker compose up -d db`, started the real server,
+and sent a real `POST /auth/login` through it -- got back a clean,
+structured `401 Invalid Credentials` response, proving the query actually
+reached the database through the new pool config rather than erroring out
+at pool-creation time. Tore both back down afterward.
+
+**New concept: connection pooling**
+Opening a new database connection is expensive (a TCP handshake, then
+Postgres authentication) -- too slow to redo on every single query. A pool
+opens a small number of connections up front and hands them out to
+whichever request needs one next, returning them to the pool when done
+instead of closing them. `max` bounds how many connections can exist at
+once; `idleTimeoutMillis` decides when to actually close ones that have sat
+unused; `connectionTimeoutMillis` decides how long a request should wait
+for a connection to free up before giving up.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. Why does `connectionTimeoutMillis` matter more in a serverless
+   deployment (Vercel) than it would running one long-lived server
+   process?

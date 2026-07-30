@@ -7,7 +7,18 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 const globalForPrisma = global;
 
 function createClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  // Explicit pool sizing rather than pg's bare defaults (max: 10,
+  // idleTimeoutMillis: 10000, connectionTimeoutMillis: 0 -- i.e. wait
+  // forever). A capped max matters most in production, where each
+  // serverless invocation can open its own pool against Neon's shared
+  // connection limit; connectionTimeoutMillis makes a starved pool fail
+  // fast (a 500) instead of a request hanging indefinitely.
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+  });
   return new PrismaClient({ adapter });
 }
 
