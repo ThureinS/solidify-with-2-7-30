@@ -1512,3 +1512,209 @@ blocked action, or whether it was just the first path tried.
 **You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
 1. Why did the `api` build need a separate `deps` stage instead of just
    running `npm ci` once in the final `api` stage directly?
+
+## 2026-07-30 — App research + first 4 bonus stats features (due count, completion rate, streak, daily goal)
+
+**Context: why this session happened**
+Frontend redesign (Almanac, see §10 of `developer-handover.md`) is on hold
+mid-flight -- the history page is built, the other four screens aren't.
+Before restyling those, wanted to research what other spaced-repetition/
+flashcard apps (Anki, Duolingo, Quizlet, RemNote, Mochi, Brainscape,
+Memrise) do that this project doesn't, with no constraint against
+breaking this project's own rules -- a real brainstorm, not a scoped
+backlog. Sorted the resulting list into "suitable" (doesn't conflict with
+the graded 2-7-30/no-early-review spec, doesn't need a schema change,
+doesn't need a user base this app doesn't have) vs "not suitable" (adaptive
+scheduling, leaderboards, image occlusion, a forgetting-curve graph -- see
+that message in the transcript for the full list and reasoning per item).
+From "suitable," further split into schema-change-needed (backlogged:
+leech flagging, deck/category grouping, streak-freeze tokens, cloze cards)
+vs no-schema-change (built this session). A fifth no-schema item, a
+missed-today email notification, got dropped outright -- the real
+deployment doesn't actually send mail, so building it would be pointless.
+
+**What was built**
+- **Due-count widget**: `{dueItems.length} due today` in the Dashboard
+  header. Zero backend work -- `dueItems` was already being fetched for the
+  "Due today" tab; the count was just sitting there unused. Needed a CSS
+  fix (`.dashboard-header-links`) since the header's `justify-content:
+  space-between` was built for exactly 2 children and a 3rd would've thrown
+  off the spacing.
+- **Completion rate** (`{N}% completion this year`): sums `reviewCount`/
+  `skipCount` across the year's worth of days the history page already
+  fetches. Originally going to call this "retention rate" (the term Anki
+  and similar apps use) until checking `submission-requirements.md` --
+  `SKIPPED` means "deferred, due again tomorrow," not "got it wrong." This
+  app has no correct/incorrect signal at all, only reviewed-vs-deferred.
+  Calling it "retention" would have implied a kind of memory-accuracy
+  measurement the data doesn't actually contain, and it would have directly
+  contradicted the history page's own existing copy ("skipping is a
+  legitimate move here, not a failure"). Renamed to "completion rate"
+  before writing any code.
+- **Daily streak**: new backend logic, `deriveStreak` in
+  `src/services/items.service.js` -- counts consecutive active days
+  walking back from "today" (client-provided, same rule as `dueQuerySchema`).
+  Deliberately queries *all* of a user's Review dates, not just the
+  currently-viewed year, because a streak that fakes a reset every January
+  1st for crossing a year boundary would be a real bug, not just an
+  inconsistency. Exposed as an optional `currentStreak` field on the
+  existing `GET /items/review-history` endpoint (new optional `date` query
+  param) rather than a new endpoint -- old callers that don't pass `date`
+  get the same response shape as before. 6 new unit tests in
+  `tests/streak.test.js`, including one that specifically crosses a year
+  boundary.
+- **Daily goal + progress bar**: fully frontend, no backend at all. A
+  number input (`localStorage`-backed, keyed per user id) and a native
+  `<progress>` element -- not a hand-built div/CSS bar, since the browser
+  already has this widget built in.
+
+**Problems hit, and how they were found**
+- Before any of this could be tested, `demo@example.com` login started
+  failing with a 500. Turned out local Postgres/Redis (`docker compose`)
+  weren't running at all -- had been stopped since an earlier session.
+  Found via reading the backend's own error log rather than guessing:
+  `PrismaClientKnownRequestError ... ECONNREFUSED`. Fixed with
+  `docker compose up -d db redis`; the existing data (from earlier
+  sessions) was still sitting in the named volume, untouched.
+- Wrote a **separate, dev-only seed script**
+  (`scripts/seed-test-data.js`, *not* `prisma/seed.js` -- that one's the
+  graded, deterministic seed contract) to generate a full year of messier
+  data for a new `stats-test@example.com` account: gaps, skip-only days,
+  mixed days, a deliberate unbroken run near today, and a few rows from
+  last year to test the history page's year switcher. Verified the seeded
+  data's shape directly against the API (`curl`) rather than trusting the
+  seed script's own console output.
+- **Real bug caught during verification, not before it**: the daily goal
+  didn't survive a page reload the first time. Root cause: `user` (a prop)
+  starts as `null` and loads asynchronously (see `App.jsx`'s `getMe`
+  effect) -- but the goal's `localStorage` key is `` `dailyGoal:${user.id}`
+  ``, and it was being read inside `useState`'s lazy initializer, which
+  only ever runs once, on the very first render, before the real `user.id`
+  exists. Fixed by moving that read into a `useEffect` keyed on `user?.id`,
+  so it re-reads once the real id shows up. Reloaded and re-checked to
+  confirm the fix actually held, rather than trusting the diff alone.
+
+**New concepts introduced**
+- **A `useState` lazy initializer function runs exactly once**, at the very
+  first render, and never again -- even if the values it reads (like a prop)
+  change later. Anything that depends on a prop/value that might not be
+  ready yet on the first render needs a `useEffect` instead, not a fancier
+  initializer.
+- **Native `<progress value max>` element.** No custom CSS bar needed --
+  the browser draws it, and `accent-color` (already used elsewhere in this
+  project's CSS for checkboxes) themes it to match.
+- **Backward-compatible endpoint extension.** Adding an optional query
+  param (`date`) and an optional response field (`currentStreak`) that's
+  simply absent from the JSON when not requested, instead of versioning the
+  endpoint or adding a new one -- `res.json()` silently drops keys whose
+  value is `undefined`.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. Why was "retention rate" the wrong name for the reviewed-vs-skipped
+   ratio, even though the math itself is completely correct?
+2. Why does the streak calculation need to look across *all* years of
+   Review data, when the history page it lives next to only ever looks at
+   one year at a time?
+3. Why didn't reading `localStorage` inside `useState(() => ...)` work for
+   the daily goal, when the exact same read worked fine inside a
+   `useEffect`?
+
+## 2026-07-30 (same day, later) — Code review of the bonus stats work, and 3 fixes it found
+
+**Context: why this session happened**
+The four bonus stats features (due count, completion rate, streak, daily
+goal) were finished and manually clicked through, but still uncommitted.
+Rather than commit straight away, ran a proper review pass over the whole
+uncommitted diff -- a normal code review, not the usual build-a-feature
+loop. The rule for this pass was: re-derive the tricky logic independently
+instead of trusting that the tests we just wrote happen to test the right
+thing. A test you wrote yourself, in the same hour as the code, can be
+wrong in exactly the same way the code is wrong.
+
+**What the review confirmed (no changes needed)**
+- **`deriveStreak` is correct.** Re-checked by hand against cases the
+  committed tests don't cover: duplicate dates, dates in the future
+  relative to "today", a US daylight-saving weekend, a leap day, a
+  month boundary, and a 3000-day streak (3ms). It holds up because
+  `src/lib/dates.js` anchors every date at UTC midnight, so "add one day"
+  can never land on the same calendar day twice or skip one.
+- **The `currentStreak` addition really is backward-compatible**, in both
+  halves -- not just the one we thought about. Server half: verified
+  `JSON.stringify` drops a key whose value is `undefined`, so a caller
+  that omits `date` gets `{"year":...,"days":[...]}` byte-for-byte as
+  before. Client half (the half we hadn't checked): `ReviewHistoryPage.jsx`
+  still calls `getReviewHistory(token, year)` with two arguments, and the
+  new third parameter being optional means it builds the exact same URL.
+
+**Three things it found, all fixed**
+1. **The daily-goal bug from earlier was only half fixed.** Moving the
+   `localStorage` *read* into a `useEffect` fixed reading. But the *write*
+   still used a key built from `user?.id ?? 'anon'`, and the goal input was
+   on screen and editable before `user` had loaded. The nasty version isn't
+   the split-second race -- it's that `App.jsx` deliberately keeps you
+   logged in when `/auth/me` fails with a server error (only 401/403 logs
+   you out). So one bad response leaves `user` as `null` for the *entire*
+   session: you set a goal, the bar fills, everything looks fine, and the
+   value is quietly saved under `dailyGoal:anon` and gone forever on the
+   next good load. Fix: don't render the goal row at all until `user?.id`
+   exists. If we can't name the user, we can't safely save their setting.
+2. **The streak went stale the moment you used the app.** The stats were
+   fetched once, keyed on `[token]`. So: open the dashboard with a streak
+   of 0, review your first item of the day, and the streak stays 0 until
+   you reload -- the one moment the feature exists to celebrate. Fix:
+   pulled the fetch out into `refreshStats()` and call it after every
+   review and skip. Deliberately *not* fixed by bumping the number locally
+   (`streak + 1`): if today was already an active day when the page
+   loaded, the server's number already counts today, so a local +1 would
+   sometimes be a double-count. Tracking which case you're in is more code
+   than just asking the server again. Same reasoning applied to
+   `handledToday`, whose optimistic `+1` was deleted -- the server's count
+   is now the single source of truth for all three numbers.
+3. **`prisma.review.findMany({ distinct: ['date'] })` was not doing what it
+   looks like it's doing.** Checked by turning on Prisma's query logging
+   and reading the SQL it actually sent: no `DISTINCT` anywhere. It fetched
+   all 164 review rows for the test account (plus an `id` column nobody
+   asked for) and deduplicated them down to 84 in JavaScript afterwards.
+   `groupBy: { by: ['date'] }` emits a real `GROUP BY` and returns those 84
+   rows straight from Postgres. Swapped it. Worth being clear about the
+   motive: at 164 rows this is not a speed problem and never was. The
+   problem is that the code *reads* as "the database does the
+   deduplicating", so anyone maintaining it -- including me, in an
+   interview -- would confidently describe it wrongly.
+
+**How the fixes were verified**
+Not by re-reading the diff. Set a daily goal of 2 in the browser, clicked
+Review once, and watched the header go from `4 due today · 100% completion
+this year` to `3 due today · 100% completion this year · 1 day streak`
+with no reload -- the streak label *appearing* is the whole of fix 2. Then
+after the `groupBy` swap, called `getCurrentStreak` against the real
+database for both accounts and got 1 and 14, where 14 is exactly what
+`scripts/seed-test-data.js` predicts in its own console output. Then
+reloaded the app once more to confirm end to end. 25/25 tests still pass.
+(Side effect worth knowing: that verification really did review one item
+on `demo@example.com`, so its stage advanced. `npm run seed` resets it.)
+
+**New concepts introduced**
+- **Prisma's `distinct` is not SQL `DISTINCT`.** It fetches every matching
+  row and removes duplicates in JavaScript afterwards. `groupBy` is the one
+  that pushes the work into the database. The lesson generalises: when a
+  query's cost matters, read the SQL the tool actually sent instead of
+  trusting how the method name reads.
+- **Single source of truth for a displayed number.** When a number is
+  computed by the server, either the server owns it (refetch after a
+  change) or the client owns it (update locally). Doing both means two
+  copies that can disagree, and the bug shows up as an off-by-one nobody
+  can reproduce.
+- **Conditional rendering as a safety guard, not just a layout choice.**
+  `{user?.id && <GoalRow />}` isn't about tidiness -- it makes it
+  *impossible* to reach a control before the data that control depends on
+  has arrived. Preventing the bad state beats handling it.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. Why is refetching the streak from the server after a review safer than
+   just adding 1 to the number already on screen?
+2. The daily-goal bug was "already fixed" once. What was still broken, and
+   why did hiding the input fix it more thoroughly than any change to the
+   saving code would have?
+3. `distinct` and `groupBy` returned the identical 84 dates here. If the
+   result is the same either way, what was actually wrong with `distinct`?
