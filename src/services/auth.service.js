@@ -6,13 +6,18 @@ const emailQueue = require('../lib/emailQueue');
 
 const SALT_ROUNDS = 10;
 
+// Feature flag: a kill switch for the welcome email, toggleable without a
+// redeploy (e.g. if Gmail starts rate-limiting/blocking the SMTP account).
+// Defaults on -- only "false" turns it off.
+const WELCOME_EMAIL_ENABLED = process.env.FEATURE_WELCOME_EMAIL !== 'false';
+
 async function registerUser({ email, password }) {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await prisma.user.create({ data: { email, passwordHash } });
 
   // Fire-and-forget: never awaited inline, so a queue/Redis failure can't
   // turn a successful signup into a 500.
-  if (emailQueue) {
+  if (emailQueue && WELCOME_EMAIL_ENABLED) {
     emailQueue
       .add('welcome', { userId: user.id, email: user.email })
       .catch((err) => console.error('enqueue welcome failed:', err.message));

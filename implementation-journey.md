@@ -1386,3 +1386,55 @@ conversation to have first, not a side effect of a caching feature.
 **You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
 1. Why did killing the entire database not prove the cache-fallback works,
    even though the fallback code itself is correct?
+
+## 2026-07-30 — Instructor checklist gap #4: feature flags
+
+**What was built**
+One real env-driven kill switch: `FEATURE_WELCOME_EMAIL` in
+`src/services/auth.service.js`. Defaults on; setting it to the literal
+string `"false"` skips enqueueing the welcome email on registration,
+without touching anything else about signup. Documented in `.env.example`.
+No new dependency, no admin UI, no database toggle table -- just an env
+variable read once at module load, matching the checklist's own simplest
+allowed option ("via env variable, config, or database toggle").
+
+**Why this feature, specifically**
+Needed a real, already-existing feature worth being able to kill without a
+redeploy. The welcome email is a good fit: it depends on an external
+service (Gmail SMTP) outside this app's control, so there's a real
+scenario where you'd want to disable it fast (Gmail starts rate-limiting
+or blocking the account) without waiting on a deploy.
+
+**A test that gave a wrong answer first, and why**
+First verification attempt used two manual `node --env-file=.env
+src/server.js` runs on port 3000, one with the flag off, one with it on --
+and got the *same* result both times (a job enqueued either way), which
+looked like the flag didn't work at all. Turned out there's an old,
+unrelated `nodemon` process (`npm run dev`, PID 33953) that's apparently
+been running in the background since the previous session, quietly
+competing for the same port 3000. Whichever process actually won that race
+served the curl request -- not necessarily the one just started with the
+test's env var. Left that stray nodemon process alone (not this session's
+to kill, and not worth the risk of disrupting something intentionally
+left running) and instead reran both tests on an isolated `PORT=3001`,
+confirming the process that started was the process that answered.
+Result, unambiguous this time: flag off -> zero jobs in the Redis queue;
+flag on (default) -> exactly one job, matching the registered email.
+
+**New concept: feature flags**
+A feature flag is a runtime switch (here, one environment variable) that
+turns a piece of behavior on or off without shipping new code. The
+payoff is speed: fixing a bug takes a code change, a review, a deploy;
+flipping a flag takes one config edit and a restart (or, with a
+database-backed flag, not even that). The trade-off is exactly what this
+session's own testing accidentally demonstrated: anything that depends on
+runtime state (which process is actually running, which env it actually
+has) can behave unpredictably if you don't control that state precisely --
+which is also why a *database*-backed flag (checked per-request) is often
+preferred over an env var in a real production system: it can change
+without even restarting the process, and there's no ambiguity about which
+running instance has which value.
+
+**You should be able to explain (logged with my own answer in `learning.md`, not gating on a reply)**
+1. The first test run showed identical behavior for flag-on and flag-off.
+   What made that result untrustworthy, and what changed to fix it?
