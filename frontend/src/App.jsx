@@ -64,9 +64,7 @@ function App() {
   if (!token) {
     return (
       <AlmanacShell onToggleMode={toggleMode} loggedIn={false}>
-        <div className="app">
-          <AuthForm onLoggedIn={handleLoggedIn} />
-        </div>
+        <AuthForm onLoggedIn={handleLoggedIn} />
       </AlmanacShell>
     );
   }

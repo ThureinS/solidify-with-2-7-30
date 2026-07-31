@@ -19,7 +19,7 @@ queue until you get to it — there's no penalty, and no early reviews either
 
 ## Creating an account
 
-1. Open the app and click **"Need an account? Register"**.
+1. Open the app and switch the **Log in / Register** toggle to **Register**.
 2. Enter an email and a password (at least 8 characters, with at least one
    letter and one number).
 3. You're logged in immediately after registering.
