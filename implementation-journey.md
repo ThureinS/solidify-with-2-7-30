@@ -1826,3 +1826,103 @@ build process the history page followed, repeated three more times.
 3. The mobile bug only affected `AlmanacShell.jsx`, not Dashboard,
    AuthForm, or ItemDetail's own markup. What's different about how those
    three were built that made them scale down correctly for free?
+
+## 2026-07-31 — Frontend redesign phase 2, final screen: AdminPanel
+
+`AdminPanel.jsx` was the last screen still on the old hand-written
+`App.css` look. It's built now, in the Almanac design, and the whole
+Almanac redesign (`developer-handover.md` §10) is fully done.
+
+**What was built**
+- Design-locked first, same process as every other screen this phase: an
+  HTML-mockup Artifact with 3 named directions (Consistent, Status chips,
+  Compact rows), shown before touching any code. The user picked
+  "Consistent" (same card-per-row style as Dashboard's item list), then
+  asked for one more idea beyond the three shown. A 4th direction —
+  grouping rows into Active/Suspended sections with a small circular
+  initial "monogram" badge per row — was added to the *same* artifact
+  (same URL, new tab) rather than starting a fresh one. That's the one
+  that got picked and built.
+- `AdminPanel.jsx`: users now render in two sections, "Active" and
+  "Suspended," each with a count in its label. A monogram badge (the
+  display serif font in a circle) sits to the left of each row instead of
+  a generic avatar. Same `listUsers`/`suspendUser`/`unsuspendUser` calls
+  and the same `Pagination` component as before — only the markup and
+  classes changed, matching how Dashboard/AuthForm/ItemDetail were done.
+- Dropped the temporary `<div className="app">` wrapper in
+  `Dashboard.jsx` that had been holding AdminPanel's spot since the
+  history-page phase. That wrapper was the *only* thing still using
+  `App.css`, so with it gone every rule in `App.css` was dead code —
+  deleted the file and its `import './App.css'` in `App.jsx`.
+- Fixed a real bug found at the 375px mobile check: long emails (a single
+  unbreakable string, no spaces to wrap on, e.g.
+  `detailtest+721@example.com`) overflowed past their row and visually
+  overlapped the Suspend/Unsuspend button instead of wrapping to a second
+  line. Fixed with Tailwind's `break-words` (CSS `overflow-wrap:
+  break-word`) on the email text. Desktop and tablet were unaffected —
+  there was already enough room for the email on one line.
+
+**Key decisions and why**
+- **Grouping is per-page, not global**, and that's a known, accepted
+  rough edge, not an oversight: the user list is still server-paginated
+  20-at-a-time by join order. A suspended user sitting on page 2 won't
+  show up in page 1's "Suspended" section. This was flagged *before* the
+  direction was picked, and the user chose it anyway — worth remembering
+  if a future session is tempted to "fix" it by fetching all users at
+  once, which isn't actually what was asked for.
+- **The monogram uses the display serif font**, not a plain sans-serif
+  initial, specifically to tie it back to the "Almanac" brand identity
+  (echoing the wordmark) rather than reading as a generic SaaS-dashboard
+  avatar bubble.
+- **The docs (`developer-handover.md` §10/§10b) got restructured, not
+  just appended to**: §10b used to be "not yet built: AdminPanel"; since
+  that's done, it's repurposed to hold only the one thing still genuinely
+  open — the discussed-not-committed weekly-recap idea.
+
+**Problems hit and how they were solved**
+1. **Local dev DB had no ADMIN account** to actually see the Admin tab
+   and test Suspend/Unsuspend for real. The fix was the project's own
+   `npm run seed` script (seeds `demo@example.com` / `admin@example.com`
+   into the *local* Postgres dev DB — confirmed the `.env` pointed at
+   `localhost:5432`, not the Neon prod DB, before running it). Running
+   both the ad-hoc DB query and `npm run seed` needed an explicit one-time
+   permission grant first — the safety layer treats anything that writes
+   to a database as worth a human's yes, even against a local dev DB.
+2. **A stray, days-old Vite dev-server process was already listening on
+   port 5173** from an earlier session and had gotten into a reconnect
+   loop ("server connection lost, polling for restart...") after this
+   session's file edits, which made the browser preview hang. Killed it
+   and started a fresh one instead of trying to reuse or debug the stale
+   one.
+3. **The email-overflow bug wasn't visible until the actual 375px check**
+   — at any wider width there was enough room, and the row's flex layout
+   (`flex-1 min-w-0` on the email's container) looked correct by
+   inspection. Same lesson as the header `flex-wrap` bug from earlier in
+   phase 2: a layout bug involving text wrapping only shows up once the
+   text actually runs out of room, which for admin data (real emails,
+   some long) only happens on a narrow screen.
+
+**New concepts introduced**
+- **`overflow-wrap: break-word` (Tailwind's `break-words`)**: tells the
+  browser it's allowed to break a word *in the middle* — even one with no
+  natural break point like a hyphen or space — if that's what it takes to
+  keep it from overflowing its box. An email address is exactly this
+  case: one long unbroken token. Different from `word-break: break-all`
+  (Tailwind's `break-all`), which breaks aggressively at any character
+  even when it isn't necessary — `break-words` only steps in when the
+  text would otherwise overflow.
+- **Dead code cascades**: deleting the one remaining consumer of a CSS
+  file (the `.app` wrapper) doesn't just make that one usage dead — it
+  makes the *entire file* dead, because every rule in `App.css` was
+  scoped under `:where(.app)`. Worth checking for this kind of cascade
+  whenever the last usage of something gets removed, not just the thing
+  removed itself.
+
+**You should be able to explain**
+1. Why is AdminPanel's Active/Suspended grouping only accurate within a
+   single page of results, and why was that an accepted trade-off rather
+   than a bug to fix?
+2. What's the difference between `break-words` and `break-all`, and why
+   does an email address specifically need the former?
+3. Why did deleting one `<div className="app">` wrapper in `Dashboard.jsx`
+   end up deleting an entire separate file (`App.css`)?
