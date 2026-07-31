@@ -277,7 +277,7 @@ Done, live-verified in a browser, backend tests passing (19/19):
   follow the same default-to-OS, override-via-toggle pattern rather than
   defaulting to a fixed theme.
 
-**Two gotchas a next session needs to know, both bitten once already:**
+**Three gotchas a next session needs to know, all bitten at least once already:**
 
 1. **`App.css` has bare element selectors** (`button {}`, `h1 {}`, `form {}`,
    etc.), not scoped to `.app`. Any new Tailwind-styled page reuses the same
@@ -300,6 +300,24 @@ Done, live-verified in a browser, backend tests passing (19/19):
    `<button>` with just a `hover:*` Tailwind class and nothing else is
    suspect — give it an explicit base color and, for buttons,
    `bg-transparent border-0 p-0`.
+3. **Skipping Preflight also means form controls (`button`/`input`/`select`/
+   `textarea`) don't inherit typography from an ancestor at all** — the
+   browser's own UI font/size wins instead, unless a Tailwind class sets it
+   directly on that element. Every pill button across Dashboard/AuthForm/
+   ItemDetail was silently rendering in Arial at ~13px instead of Optima/
+   Futura + `text-sm`, and the edit `<textarea>` defaulted to monospace —
+   only caught by comparing `getComputedStyle` before/after in the browser,
+   not by looking at the JSX. Fixed once, globally, in `index.css`:
+   `button, input, select, textarea { font: inherit; color: inherit; }` —
+   **but it must live inside `@layer utilities`**, the same layer Tailwind's
+   own utilities load into. An unlayered version of that rule beats
+   `text-sm`/`text-almanac-mute`/etc. *unconditionally*, regardless of
+   specificity (unlayered CSS always wins over layered CSS — see gotcha
+   about `:where(.app)` above, same underlying mechanism, opposite
+   direction), silently undoing every button's explicit size/color rather
+   than just filling the gap for unstyled ones. If you add another global
+   fallback rule for Tailwind-styled markup, it needs the same
+   `@layer utilities` wrapper.
 
 ### 10b. Not yet built: restyling the rest of the app
 
