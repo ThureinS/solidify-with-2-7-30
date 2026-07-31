@@ -277,11 +277,14 @@ Done, live-verified in a browser, backend tests passing (19/19):
   follow the same default-to-OS, override-via-toggle pattern rather than
   defaulting to a fixed theme.
 
-**Phase 2 (2026-07-31): Dashboard, AuthForm, and ItemDetail are now built too.**
-Design-locked the same way as the history page — HTML-mockup Artifacts
-comparing whole named directions (Dashboard: 4, AuthForm: 3, ItemDetail: 3)
-were shown before any component was touched, and the user picked one for
-each. Only `AdminPanel.jsx` is left on the old look — see §10b.
+**Phase 2 (2026-07-31): Dashboard, AuthForm, ItemDetail, and AdminPanel are
+now all built** — every screen in the redesign is in the Almanac look, so
+§10 as a whole is fully built. Design-locked the same way as the history
+page each time — HTML-mockup Artifacts comparing whole named directions
+(Dashboard: 4, AuthForm: 3, ItemDetail: 3, AdminPanel: 4) were shown before
+any component was touched, and the user picked one for each. §10b, formerly
+"not yet built: AdminPanel," is repurposed below for the one thing still
+genuinely open: the discussed-not-committed ideas.
 
 - **Shared shell** (`frontend/src/AlmanacShell.jsx`): one persistent top bar
   (brand, nav links, the light/dark toggle, logout) now wraps *every*
@@ -321,6 +324,20 @@ each. Only `AdminPanel.jsx` is left on the old look — see §10b.
   one real bug: the shared header's nav row had no `flex-wrap`, so "Due &
   reviews" broke mid-phrase on a phone instead of wrapping as a whole item.
   Fixed in `AlmanacShell.jsx`; desktop/tablet checked and unaffected.
+- **AdminPanel** (`frontend/src/AdminPanel.jsx`): rows now group into
+  Active/Suspended sections (a count in each label) instead of one flat
+  list, each row with a small circular initial "monogram" badge — the
+  display serif in a circle, echoing the brand mark rather than a generic
+  avatar. Same `listUsers`/`suspendUser`/`unsuspendUser` logic and
+  pagination, untouched; only markup/classes changed, same as the other
+  three screens. Dropped the temporary `<div className="app">` wrapper in
+  `Dashboard.jsx` (§10b used to flag this), which made every remaining rule
+  in `App.css` dead — deleted the file and its `import './App.css'` in
+  `App.jsx`. AdminPanel's own mobile pass (375px) found a second real bug
+  the same way the header one was found: long emails (one unbreakable
+  token, no spaces) overflowed into the Suspend/Unsuspend button instead of
+  wrapping; `break-words` on the email text fixes it, desktop/tablet
+  unaffected.
 
 **Three gotchas a next session needs to know, all bitten at least once already:**
 
@@ -364,28 +381,10 @@ each. Only `AdminPanel.jsx` is left on the old look — see §10b.
    fallback rule for Tailwind-styled markup, it needs the same
    `@layer utilities` wrapper.
 
-### 10b. Not yet built: AdminPanel (the last screen)
+### 10b. Ideas discussed, not committed
 
-`AdminPanel.jsx` is the only screen still on the original hand-written
-`App.css` look — a paginated user list with Suspend/Unsuspend. It's
-currently wrapped in a temporary `<div className="app">` inside
-`Dashboard.jsx`'s `view === 'admin'` branch so it keeps working
-unconverted; **drop that wrapper once it's restyled** (grep
-`className="app"` in `frontend/src` first — it should be the only hit
-left).
-
-Same process as the other three screens: a design-lock pass first (mockup
-options as a fresh HTML Artifact, not a straight port of Dashboard's
-tokens), pick a direction, then build — reusing whatever shell/pill-tab/
-panel-card/list-row conventions the other screens already settled on
-rather than inventing new ones. After building: remove the `.app` wrapper,
-re-check `App.css` for now-dead rules (the same way `.pagination`,
-`.item-text`, `.detail-subhead` etc. got deleted as each earlier screen
-converted), and re-run the mobile-viewport check (375px/768px) before
-calling it done.
-
-Once AdminPanel lands, `App.css` should be almost entirely deletable and
-this whole §10 can be marked fully built.
+Every screen in the redesign is built now (§10a) — nothing left in this
+section is a build queue, just the process's own leftovers.
 
 **Direction — "Almanac":** deep indigo (`#1B1F3B`) background, gold accent
 (`#E8C468`), Big Caslon/Didot serif for display type, Optima/Futura for body
@@ -404,11 +403,12 @@ comparing this week's vs. last week's review count are the two considered
 worth keeping — both computed from existing data, no new state. Rank titles
 and milestone toasts were discussed and explicitly set aside as reading like
 "a game skin bolted onto a study tool" rather than something native to the
-design — revisit only if asked for directly. **Open question, not yet
+design — revisit only if asked for directly. **Open question, still not
 decided:** whether the weekly recap is in scope for this restyle pass —
-asked once, the answer was "decide after seeing Dashboard built"; Dashboard
-is built now, so this is still live and worth raising with the user before
-or after AdminPanel.
+asked once after Dashboard ("decide after seeing Dashboard built"), raised
+again in the AdminPanel session (2026-07-31) and still not answered. Worth
+resolving before treating §10 as fully closed, or deliberately deferring it
+past the §12a deploy pass if the answer is "not now."
 
 ## 11. Running it
 
