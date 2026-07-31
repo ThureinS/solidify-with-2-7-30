@@ -223,8 +223,9 @@ the full back-and-forth and build log). A static, self-contained reference
 build of the approved design still lives at
 **`design/review-history-demo.html`** — open it directly in a browser, no
 build step, no server needed — but it's now a *reference*, not the only
-implementation: the real page is built (§10a). **Design decisions below are
-still final/locked** for anything not yet built (§10b).
+implementation: the real page is built (§10a). Every screen in the redesign
+is now built (§10a, as of AdminPanel on 2026-07-31) — §10b holds only the
+discussed-not-committed ideas, nothing left to build.
 
 **Committed locally, not pushed to `origin/main` yet** (`3dded9d`) —
 deliberately held back until the whole redesign (§10b too) is finished, so
@@ -350,7 +351,11 @@ genuinely open: the discussed-not-committed ideas.
    specific* than the bare `button` it replaced, which silently outranked
    existing overrides elsewhere in the file (broke `.add-item-form`'s
    row layout). `:where()` scopes without adding specificity. If you add
-   more global selectors to `App.css`, scope them the same way.
+   more global selectors to `App.css`, scope them the same way. **`App.css`
+   itself was deleted 2026-07-31** (AdminPanel was its last consumer, so
+   every rule in it went dead) — kept as a gotcha here anyway, because the
+   unlayered-beats-layered mechanism it explains is exactly what makes
+   gotcha 3's `@layer utilities` rule below behave the way it does.
 2. **Skipping Tailwind's Preflight means no CSS reset on the new page at
    all.** Every native element (`<a>`, `<button>`, eventually `<input>`/
    `<select>` if the redesign reaches a form) keeps its raw browser
