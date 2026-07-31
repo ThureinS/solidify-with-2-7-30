@@ -450,7 +450,7 @@ guaranteed current.
 - **Worker + Redis don't run in production** — see §6; purely a hosting-cost
   gap, not a code gap.
 
-### 12a. Deployment backlog — deliberately deferred until the §10b revamp lands
+### 12a. Deployment — pushed and verified live 2026-07-31
 
 Decision (2026-07-30): finish the Almanac revamp first, then push, deploy and
 seed production in one pass, so the whole app arrives aligned. Rationale: the
@@ -459,38 +459,46 @@ half-push puts a new frontend against an old API — and because the Dashboard
 swallows stat-fetch errors (`.catch(() => {})`), that combination fails
 *silently*: the stats row simply doesn't render, with no error anywhere.
 
-**Current prod state (measured 2026-07-30):** `origin/main` is 8 commits and
-8 days behind local (`52d42ed`). The deployed API has **no
-`GET /items/review-history`** — its Swagger spec documents only `/items/due`.
-Every one of the four bonus stats features reads that endpoint, so none of
-them can work on prod until this is pushed.
+**Done 2026-07-31** — steps 1–4 below, in order, once the weekly recap
+(the last §10b item) landed:
 
-Do these in order, when the revamp is done:
+1. **Pushed `main`** (`52d42ed` → `41fe4b7`, 24 commits). Both Vercel
+   projects auto-redeployed from the same push.
+2. **Nothing else needed configuring** — the stats/recap work is
+   schema-free (`Review.date`/`Review.result` already existed), so no
+   `prisma migrate deploy`, no new Vercel env var, no CORS change.
+3. **Verified live, in order:** `/api/v1/health` → 200
+   (`{"status":"ok","redis":"not-configured"}`, expected per §6 — no Redis
+   in prod) → `/api/v1/items/review-history?year=2026` with `demo@example.com`'s
+   real token → returns `days` → same URL **with** `&date=2026-07-31` →
+   also returns `currentStreak` → logged into the live frontend
+   (`https://solidify-with-2-7-30-7dc4.vercel.app`) as `demo@example.com` →
+   Dashboard renders in the Almanac look (segmented Login/Register toggle
+   confirmed it's the new build, not a stale cache) and shows "0 due today
+   · 100% completion this year" with no console errors. Streak and the new
+   weekly recap clause both correctly stayed hidden — `demo@example.com`'s
+   seed data (from `prisma/seed.js`) has no activity in the current streak
+   window or this/last calendar week, so both null-guards did their job
+   rather than rendering a wrong number or crashing.
+4. **`.gitignore` was already widened to `.env*`** (done 2026-07-30, commit
+   `d2f27de`) — nothing left to do here; this doc previously listed it as a
+   pending pre-deploy step, which was stale.
 
-1. **Push `main`.** Lifts the hold documented in `7a0838a`. One push refreshes
-   both Vercel projects.
-2. **Nothing else to configure.** The stats work is schema-free — `Review.date`
-   and `Review.result` already existed — so no `prisma migrate deploy`, no new
-   Vercel environment variable, no CORS change. A plain redeploy is enough.
-3. **Verify in this order** on the deployed URLs: `/api/v1/health` →
-   `/api/v1/items/review-history?year=<year>` with a real token returns
-   `days` → the same URL **with** `&date=<today>` also returns `currentStreak`
-   → then the Dashboard header shows the due count, completion rate and streak
-   together.
-4. **Widen `.gitignore` from `.env` to `.env*`** *before* step 5 creates a
-   local prod env file. One line, and it's what stops a Neon connection
-   string from being committed.
-5. **Seed the demo account** (see `scripts/seed-test-data.js`'s own header for
-   the commands). Two things that are easy to get wrong:
-   - `vercel env pull` is the way to get prod values locally — don't hand-copy
-     from the dashboard. Then override `DATABASE_URL` with Neon's **direct
-     (unpooled)** string, the same one §3 of the README uses for migrations.
-     Note the script reads `DATABASE_URL`, *not* `DATABASE_URL_UNPOOLED`.
-   - `DEMO_PASSWORD` is local-only. Never add it to Vercel's environment
-     variables — the app never reads it, only the seed script does.
+**Still to do, and deliberately not run by the assistant — see
+[[prod_demo_data_goal]] / the project's own convention:**
+
+5. **Seed the demo account** with rich data (see
+   `scripts/seed-test-data.js`'s own header for the exact commands). Run
+   this yourself, in your own terminal — it needs `vercel env pull` +
+   overriding `DATABASE_URL` with Neon's **direct (unpooled)** connection
+   string (the script reads `DATABASE_URL`, *not* `DATABASE_URL_UNPOOLED`),
+   and that string should never be pasted into chat (see the Neon
+   password-exposure gap in §12). `DEMO_PASSWORD` is local-only — never
+   add it to Vercel's environment variables, only the seed script reads it.
 6. **Reseed on demo day.** Everything the fixture builds is relative to the
-   day it runs: the streak ends on seed day and the due items are dated to it.
-   Measured decay: streak 14 on seed day, 14 the day after, **0** by day three.
+   day it runs: the streak ends on seed day and the due items are dated to
+   it. Measured decay: streak 14 on seed day, 14 the day after, **0** by
+   day three.
 
 Known demo gotcha, no fix planned: the daily goal lives in `localStorage`,
 which is per-origin. A goal set on the production URL won't exist on a Vercel
