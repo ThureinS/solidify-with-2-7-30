@@ -5,7 +5,6 @@ import Dashboard from './Dashboard';
 import ReviewHistoryPage from './ReviewHistoryPage';
 import AlmanacShell from './AlmanacShell';
 import { getMe } from './api';
-import './App.css';
 
 const TOKEN_KEY = 'token';
 

@@ -1,9 +1,11 @@
-/* Tailwind, scoped to theme + utilities only -- the "preflight" (base) layer
-   resets browser defaults (headings, buttons, form controls) that the
-   existing hand-written screens below still rely on. Skipping it means
-   Tailwind utility classes work on new markup (the history page) without
-   silently restyling Dashboard/AuthForm/ItemDetail/AdminPanel, which haven't
-   had their own Almanac design pass yet. */
+/* Tailwind, scoped to theme + utilities only -- no "preflight" (base) layer.
+   Preflight was skipped back when Dashboard/AuthForm/ItemDetail/AdminPanel
+   were still on the old hand-written App.css look, so it wouldn't silently
+   restyle them before their own Almanac pass. That App.css is gone now (every
+   screen is Tailwind-styled -- see developer-handover.md §10), but re-adding
+   Preflight at this point is its own change, not a side effect of this one:
+   it would need every screen re-verified against its reset, not just the
+   last one converted. Left off deliberately for now. */
 @import 'tailwindcss/theme' layer(theme);
 @import 'tailwindcss/utilities' layer(utilities);
 

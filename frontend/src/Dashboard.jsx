@@ -395,9 +395,7 @@ export default function Dashboard({ token, user }) {
           />
         </>
       ) : (
-        <div className="app">
-          <AdminPanel token={token} currentUserId={user.id} />
-        </div>
+        <AdminPanel token={token} currentUserId={user.id} />
       )}
     </div>
   );
