@@ -1718,3 +1718,111 @@ on `demo@example.com`, so its stage advanced. `npm run seed` resets it.)
    saving code would have?
 3. `distinct` and `groupBy` returned the identical 84 dates here. If the
    result is the same either way, what was actually wrong with `distinct`?
+
+## 2026-07-31 — Frontend redesign phase 2: shared shell + Dashboard/AuthForm/ItemDetail restyle
+
+Dashboard, AuthForm, and ItemDetail moved from the original hand-written
+`App.css` look to the Almanac design (see `developer-handover.md` §10 for
+the technical summary). Only `AdminPanel` is left. Same design-lock-then-
+build process the history page followed, repeated three more times.
+
+**What was built**
+- `AlmanacShell.jsx`: one shared top bar (brand, nav, light/dark toggle,
+  logout) wrapping every screen via `App.jsx`, replacing each page's own
+  header. The light/dark `mode` state moved from `ReviewHistoryPage` up to
+  `App.jsx` so it survives navigating between screens.
+- Dashboard, AuthForm, and ItemDetail fully re-skinned in Almanac tokens —
+  all state/handlers untouched, only markup and classes changed.
+  `Pagination.jsx` (shared by Dashboard and AdminPanel) restyled once.
+- A new `--color-almanac-danger` token for ItemDetail's Delete button,
+  instead of reusing the gold accent for a destructive action.
+- One real bug found and fixed mid-build: form controls (`button`/`input`/
+  `select`/`textarea`) don't inherit typography from an ancestor at all
+  without Tailwind's Preflight, so every pill button was silently rendering
+  in the browser's UI font (Arial, ~13px) and the edit `<textarea>`
+  defaulted to monospace. Fixed globally in `index.css`.
+- A second bug found by an explicit mobile-viewport check (375px/768px)
+  that hadn't been done yet this phase: the shared header's nav row had no
+  `flex-wrap`, so "Due & reviews" broke mid-phrase on a phone. Fixed in
+  `AlmanacShell.jsx`.
+
+**Key decisions and why**
+- **Design-locked with HTML-mockup Artifacts before touching any component**
+  — same process as the history page, repeated for Dashboard (4 candidate
+  directions), AuthForm (3), and ItemDetail (3). Real copy and real bonus-
+  stats data in every mockup, not lorem text, so the comparison was honest.
+- **"Combined" direction for Dashboard**, picked after the user asked
+  whether two of the four mockups could be merged: the shared top bar from
+  one direction (fixes ItemDetail's missing logout/toggle) wrapping the
+  flatter body from another (plain header, pill tabs, no boxed stats
+  panel). Confirmed feasible before building it, then built exactly that.
+- **AuthForm's Login/Register toggle became a segmented pill control**,
+  replacing a plain-text link — caught that `user-manual.md` literally
+  named the old link text in its account-creation instructions, so it
+  needed updating alongside the component, not after.
+- **ItemDetail's review history became a dot-and-line timeline** instead of
+  reusing the day-cell/moon iconography from the history page — considered
+  and rejected, since that iconography was designed for a whole year's
+  density of data, not the 1-3 entries a single item ever has (2-7-30 is a
+  fixed three-step schedule).
+- **A form-control font fallback rule must live inside `@layer utilities`,
+  not as plain unlayered CSS.** The first version of the fix was unlayered
+  and broke more than it fixed — full story in "Problems hit" below.
+
+**Problems hit and how they were solved**
+1. **The font-inheritance bug wasn't visible by reading the JSX** — every
+   button looked like it should just inherit its font from the page.
+   Caught by comparing `getComputedStyle(button).fontFamily` before and
+   after a fix attempt in the running browser, not by inspection. First
+   fix attempt (`button, input, select, textarea { font: inherit; color:
+   inherit; }` as plain CSS) made it *worse*: since Tailwind's own utility
+   classes (`text-sm`, `font-semibold`, `text-almanac-mute`) live inside a
+   CSS `@layer`, and unlayered CSS always wins over layered CSS regardless
+   of specificity, the plain version silently overrode every button's
+   explicit size and color, not just the ones that had none. Confirmed by
+   checking computed styles again after the "fix" and seeing tab buttons
+   render at the wrong size and color. Fixed by wrapping the same rule in
+   `@layer utilities`, so it competes on normal specificity terms with
+   Tailwind's own classes instead of unconditionally beating them.
+2. **The mobile check hadn't been done at all until asked for.** Everything
+   built this phase had only ever been looked at in a ~1280px browser
+   window. Resizing to 375px surfaced the header-wrapping bug immediately;
+   everything else (item cards, forms, the history month-grid) already
+   scaled correctly because Tailwind's flex/wrap utilities were used
+   throughout, so only the one component with a rigid `flex` row (no
+   `flex-wrap`) broke.
+3. **A Claude Design / DesignSync integration was considered mid-session**
+   (the user remembered it existed) but its companion `/design-sync` skill
+   wasn't available in this session's tool list, so driving the raw
+   `DesignSync` tool would have meant improvising its packaging/validation
+   conventions blind. Decision: keep using the Artifact-mockup process that
+   was already working, revisit Claude Design in a session where the skill
+   is actually available.
+
+**New concepts introduced**
+- **CSS cascade layers (`@layer`)**: a named layer's rules always lose to
+  *any* unlayered rule, no matter how specific the layered selector is or
+  where it appears in the file. This cuts both ways in this codebase: it's
+  why `App.css`'s old rules had to be scoped to stay *out* of new pages
+  (specificity alone wasn't enough, but here it didn't need to be, since
+  `App.css` itself is unlayered and Tailwind's utilities are layered), and
+  it's why a *new* global fallback rule for the new pages has to be
+  deliberately placed *inside* `layer(utilities)` to behave as a fallback
+  instead of an override.
+- **Mockup-driven design lock, iterated on request.** The process isn't
+  "present three options once and pick" — when the user asked whether two
+  directions could be combined, the answer was "yes, here's a fourth tab
+  showing exactly that" rather than either refusing or silently picking
+  one. Same artifact, same URL, one more tab added.
+
+**You should be able to explain**
+1. Why did wrapping the font-inheritance fix in `@layer utilities` change
+   its behavior, when the CSS declarations inside it are identical to the
+   broken version?
+2. ItemDetail's review history uses a dot-and-line timeline, but the
+   history page's month grid uses filled/half/empty moons for the same
+   underlying reviewed-vs-skipped data. Why isn't that an inconsistency
+   worth fixing?
+3. The mobile bug only affected `AlmanacShell.jsx`, not Dashboard,
+   AuthForm, or ItemDetail's own markup. What's different about how those
+   three were built that made them scale down correctly for free?
