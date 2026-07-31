@@ -408,12 +408,12 @@ comparing this week's vs. last week's review count are the two considered
 worth keeping — both computed from existing data, no new state. Rank titles
 and milestone toasts were discussed and explicitly set aside as reading like
 "a game skin bolted onto a study tool" rather than something native to the
-design — revisit only if asked for directly. **Open question, still not
-decided:** whether the weekly recap is in scope for this restyle pass —
-asked once after Dashboard ("decide after seeing Dashboard built"), raised
-again in the AdminPanel session (2026-07-31) and still not answered. Worth
-resolving before treating §10 as fully closed, or deliberately deferring it
-past the §12a deploy pass if the answer is "not now."
+design — revisit only if asked for directly. **Decided 2026-07-31: the
+weekly recap is in scope** — asked once after Dashboard ("decide after
+seeing Dashboard built"), raised again once AdminPanel was done, and this
+time the answer was yes, build it, deliberately as its own session rather
+than folded into the AdminPanel one. Not started yet — see whichever
+session tackles it for the actual build log.
 
 ## 11. Running it
 
