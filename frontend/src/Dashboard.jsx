@@ -24,6 +24,49 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
+const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
+// Calendar week = Monday-Sunday. "This week" only counts through today (the
+// week isn't over yet); "last week" is the full prior Mon-Sun. Both sums come
+// from the `days` array Dashboard already fetches for the other stats -- no
+// extra request.
+//
+// Known gap, accepted rather than fixed: `days` is scoped to one calendar year
+// (see getReviewHistory), so in the first few days of January part of "last
+// week" (sometimes "this week" too) can fall in December of the previous,
+// un-fetched year and silently read as 0 activity there. Only matters ~1 week
+// a year.
+function computeWeeklyRecap(days, today) {
+  const [y, m, d] = today.split('-').map(Number);
+  const todayDate = new Date(y, m - 1, d);
+  const mondayOffset = (todayDate.getDay() + 6) % 7; // days since this week's Monday
+  const weekStart = new Date(todayDate);
+  weekStart.setDate(weekStart.getDate() - mondayOffset);
+  const lastWeekEnd = new Date(weekStart);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+  const lastWeekStart = new Date(lastWeekEnd);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 6);
+
+  const toDateStr = (dt) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  const sum = (startStr, endStr) =>
+    days
+      .filter((day) => day.date >= startStr && day.date <= endStr)
+      .reduce((total, day) => total + day.reviewCount + day.skipCount, 0);
+
+  const thisWeekCount = sum(toDateStr(weekStart), today);
+  const lastWeekCount = sum(toDateStr(lastWeekStart), toDateStr(lastWeekEnd));
+  if (thisWeekCount + lastWeekCount === 0) return null; // nothing to compare yet
+
+  const verb = thisWeekCount > lastWeekCount ? 'up from' : thisWeekCount < lastWeekCount ? 'down from' : 'same as';
+  return {
+    thisWeekCount,
+    lastWeekCount,
+    verb,
+    rangeLabel: `${SHORT_DATE.format(weekStart)}–${SHORT_DATE.format(todayDate)}`,
+  };
+}
+
 export default function Dashboard({ token, user }) {
   const [view, setView] = useState('due'); // 'due' | 'all' | 'admin'
   const [dueItems, setDueItems] = useState([]);
@@ -41,6 +84,7 @@ export default function Dashboard({ token, user }) {
   const [completionRate, setCompletionRate] = useState(null); // null while loading / no data yet
   const [streak, setStreak] = useState(null);
   const [handledToday, setHandledToday] = useState(0);
+  const [weeklyRecap, setWeeklyRecap] = useState(null); // null while loading / nothing to compare yet
   const goalKey = `dailyGoal:${user?.id ?? 'anon'}`;
   const [dailyGoal, setDailyGoal] = useState(0);
   const limit = 20;
@@ -72,6 +116,7 @@ export default function Dashboard({ token, user }) {
       setStreak(history.currentStreak);
       const todayEntry = history.days.find((d) => d.date === today);
       setHandledToday((todayEntry?.reviewCount ?? 0) + (todayEntry?.skipCount ?? 0));
+      setWeeklyRecap(computeWeeklyRecap(history.days, today));
     } catch {
       // a stat row failing silently isn't worth surfacing as a page error
     }
@@ -197,6 +242,8 @@ export default function Dashboard({ token, user }) {
               {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
             </span>
           )}
+          {weeklyRecap &&
+            ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} last week`}
         </span>
       </div>
 

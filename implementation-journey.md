@@ -1926,3 +1926,79 @@ Almanac redesign (`developer-handover.md` §10) is fully done.
    does an email address specifically need the former?
 3. Why did deleting one `<div className="app">` wrapper in `Dashboard.jsx`
    end up deleting an entire separate file (`App.css`)?
+
+## 2026-07-31 — Frontend redesign §10b: weekly recap (the last discussed-not-committed idea)
+
+Deliberately its own session per the 2026-07-31 decision recorded in
+`developer-handover.md` §10b: a recap comparing this week's handled count
+(reviewed + skipped) to last week's, on Dashboard. No new backend state or
+endpoint — derived entirely from data Dashboard already fetches.
+
+**What was built**
+- `computeWeeklyRecap(days, today)` in `Dashboard.jsx`: a pure function
+  (same pattern as the backend's `deriveReviewHistory`) that takes the
+  `history.days` array `refreshStats()` already fetches for completion
+  rate/streak/handled-today, and returns `null` (nothing to compare yet) or
+  `{ thisWeekCount, lastWeekCount, verb, rangeLabel }`.
+- Wired into `refreshStats()`: one more `setWeeklyRecap(...)` call after the
+  existing `setHandledToday(...)`. Same one fetch, same one function, no new
+  network request.
+- Rendered as one more clause on Dashboard's existing plain-text stat line,
+  matching the "Combined" direction's no-boxed-panels rule: `"5 handled
+  this week (Jul 27–Jul 31), down from 11 last week"`.
+
+**Key decisions and why**
+- **Calendar week (Mon–Sun), not a rolling 7-day window** — presented both
+  with trade-offs, user picked calendar week specifically so the displayed
+  range reads as a week people recognize, and asked that the date range be
+  shown so the Mon–Sun boundary is visible rather than implied.
+- **The year-boundary gap is accepted, not fixed** — `getReviewHistory`
+  fetches one calendar year at a time, and a Mon–Sun week only avoids
+  crossing Dec 31/Jan 1 in years where Jan 1 lands on a Monday. Any other
+  year, the week containing New Year's straddles both years, so for the
+  first few days of January part of "last week" (or "this week") falls in
+  the previous, un-fetched year and silently reads as 0 there. Chose to
+  document this rather than fetch a second year near the boundary — it
+  costs real code for something that only matters ~1 week a year, and the
+  user confirmed this reasoning still applies to calendar weeks (initially
+  asked why, since Mon–Sun sounds "aligned" — it isn't; Jan 1 is a Monday
+  in only 1 year out of 7).
+- **Text line, not a new visual** — matches Dashboard's existing all-text
+  stat convention (due count, completion rate, streak), no boxed panel or
+  chart, consistent with the "Combined" direction already locked for this
+  page.
+- **Date-range label shows only "this week"'s span** (`Jul 27–Jul 31`), not
+  both weeks' ranges — keeps the line from getting too long for a stat row
+  that already carries three other numbers, while still making the Mon–Sun
+  boundary visible.
+
+**Problems hit and how they were solved**
+None — verified against the existing `stats-test@example.com` seed fixture
+(`scripts/seed-test-data.js`, re-seeded fresh against the local dev DB for
+today's date) by hand-computing the expected this-week/last-week totals
+from the seed script's own day-by-day pattern and matching the number the
+UI actually rendered (5 handled this week, down from 11 last week — down
+to the exact skip-only and mixed days in the pattern). Checked light/dark
+mode and 375px/768px/desktop; the new clause wraps the same way the rest of
+the stat line already does, no extra CSS needed.
+
+**New concepts introduced**
+- **Pure functions for derived stats, kept outside the component**: like
+  the backend's `deriveReviewHistory`, `computeWeeklyRecap` takes plain data
+  in and returns plain data out — no hooks, no fetching. Easier to reason
+  about (and to test, if this project added frontend unit tests) than
+  logic tangled into `refreshStats()` directly.
+- **ISO date strings sort like dates**: `"2026-07-20" <= "2026-07-26"`
+  works correctly with plain string comparison, because `YYYY-MM-DD` is
+  zero-padded and big-endian — no need to parse to `Date` objects just to
+  check whether one day falls within a range. The rest of the codebase
+  already relies on this (e.g. `history.days.find(d => d.date === today)`).
+
+**You should be able to explain**
+1. Why does the year-boundary gap still apply with calendar weeks, even
+   though Mon–Sun sounds like it should line up with the calendar?
+2. Why is `computeWeeklyRecap` written as a standalone function that takes
+   `(days, today)` as arguments, instead of reading `history`/state
+   directly?
+3. Why does comparing `day.date >= startStr` work correctly here without
+   ever converting either side to a `Date` object?

@@ -224,15 +224,17 @@ build of the approved design still lives at
 **`design/review-history-demo.html`** — open it directly in a browser, no
 build step, no server needed — but it's now a *reference*, not the only
 implementation: the real page is built (§10a). Every screen in the redesign
-is now built (§10a, as of AdminPanel on 2026-07-31) — §10b holds only the
-discussed-not-committed ideas, nothing left to build.
+is built (§10a, as of AdminPanel on 2026-07-31), and the one idea from §10b
+worth keeping (the weekly recap) is also built as of 2026-07-31 — **the
+whole Almanac redesign, §10a and §10b both, is now feature-complete.**
 
-**Committed locally, not pushed to `origin/main` yet** (`3dded9d`) —
-deliberately held back until the whole redesign (§10b too) is finished, so
+**Committed locally, not pushed to `origin/main` yet** — held back so
 production gets one complete visual pass instead of a half-restyled app
 (pushing to `main` auto-deploys both backend and frontend on Vercel, per
-§2/§11). Don't push until the user explicitly asks for it, and don't
-re-offer after every commit in the meantime.
+§2/§11). Now that the redesign itself has nothing left to build, deploying
+it is purely a "when the user wants to" decision — §12a has the deploy-and-
+seed order for whenever that is. Don't push until the user explicitly asks
+for it, and don't re-offer after every commit in the meantime.
 
 ### 10a. Built: infra + the review-history page
 
@@ -386,10 +388,11 @@ genuinely open: the discussed-not-committed ideas.
    fallback rule for Tailwind-styled markup, it needs the same
    `@layer utilities` wrapper.
 
-### 10b. Ideas discussed, not committed
+### 10b. Ideas discussed, not committed (now: process leftovers only)
 
-Every screen in the redesign is built now (§10a) — nothing left in this
-section is a build queue, just the process's own leftovers.
+Every screen in the redesign is built now (§10a), and the weekly recap
+below is also built (2026-07-31) — nothing left in this section is a build
+queue, just the process's own leftovers and design-direction history.
 
 **Direction — "Almanac":** deep indigo (`#1B1F3B`) background, gold accent
 (`#E8C468`), Big Caslon/Didot serif for display type, Optima/Futura for body
@@ -404,16 +407,28 @@ chosen over Almanac).
 
 **Playful/gamification ideas discussed, not committed:** a live-filling
 "today" indicator (built into the design above) and a weekly recap
-comparing this week's vs. last week's review count are the two considered
+comparing this week's vs. last week's review count were the two considered
 worth keeping — both computed from existing data, no new state. Rank titles
 and milestone toasts were discussed and explicitly set aside as reading like
 "a game skin bolted onto a study tool" rather than something native to the
-design — revisit only if asked for directly. **Decided 2026-07-31: the
-weekly recap is in scope** — asked once after Dashboard ("decide after
-seeing Dashboard built"), raised again once AdminPanel was done, and this
-time the answer was yes, build it, deliberately as its own session rather
-than folded into the AdminPanel one. Not started yet — see whichever
-session tackles it for the actual build log.
+design — revisit only if asked for directly.
+
+**Weekly recap: built 2026-07-31**, in its own dedicated session as decided
+the same day. `computeWeeklyRecap(days, today)` in `Dashboard.jsx` — a pure
+function, same shape as the backend's `deriveReviewHistory` — derives it
+from the `history.days` array `refreshStats()` already fetches, no new
+fetch or endpoint. Calendar week (Mon–Sun), not a rolling 7-day window;
+renders as one more clause on the existing plain-text stat line, e.g. "5
+handled this week (Jul 27–Jul 31), down from 11 last week". Known, accepted
+limitation: `getReviewHistory` fetches one calendar year at a time, so in
+years where Jan 1 isn't a Monday (6 years out of 7), the calendar week
+containing New Year's straddles the year boundary — for the first few days
+of January, part of "last week" (or "this week") can fall in the previous,
+un-fetched year and silently read as 0 there. Not worth a second fetch for
+~1 week/year; see `implementation-journey.md`'s 2026-07-31 weekly-recap
+entry for the full reasoning and verification (checked against the
+`stats-test@example.com` seed fixture, hand-computed against
+`scripts/seed-test-data.js`'s own pattern).
 
 ## 11. Running it
 
