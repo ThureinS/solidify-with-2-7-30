@@ -277,6 +277,51 @@ Done, live-verified in a browser, backend tests passing (19/19):
   follow the same default-to-OS, override-via-toggle pattern rather than
   defaulting to a fixed theme.
 
+**Phase 2 (2026-07-31): Dashboard, AuthForm, and ItemDetail are now built too.**
+Design-locked the same way as the history page — HTML-mockup Artifacts
+comparing whole named directions (Dashboard: 4, AuthForm: 3, ItemDetail: 3)
+were shown before any component was touched, and the user picked one for
+each. Only `AdminPanel.jsx` is left on the old look — see §10b.
+
+- **Shared shell** (`frontend/src/AlmanacShell.jsx`): one persistent top bar
+  (brand, nav links, the light/dark toggle, logout) now wraps *every*
+  screen via `App.jsx`, replacing each page building its own header. Fixes
+  a real gap the mockup process surfaced: opening an item used to hide the
+  header entirely, with no way to log out or flip theme from inside it.
+  The `mode` state itself moved from `ReviewHistoryPage` up to `App.jsx` so
+  the toggle survives navigating between screens instead of resetting.
+- **Direction picked, "Combined"**: the shared top bar above (which fixes
+  the ItemDetail gap) wrapping a flatter per-page body — plain title + stat
+  line, pill tabs / segmented controls, no boxed "today"-style panel around
+  the stats. Bar from one candidate direction, body language from another;
+  see the git log for the rejected alternatives (Unified Shell's boxed
+  stats panel, a two-column "Command Center" rail layout, a no-shared-shell
+  "Minimalist" option).
+- **Dashboard** (`frontend/src/Dashboard.jsx`): fully re-skinned — pill
+  due/all/admin tabs, flat header. All four bonus stats (due count,
+  completion rate, streak + tooltip, goal row with `<progress>`) and every
+  handler are byte-for-byte unchanged; only markup/classes moved.
+- **AuthForm** (`frontend/src/AuthForm.jsx`): a bordered card with a
+  Login/Register **segmented pill toggle** at the top, replacing the old
+  plain-text "Need an account? Register" link. Same fields/validation/
+  submit copy. `user-manual.md`'s account-creation step named that old link
+  text literally and needed a matching update.
+- **ItemDetail** (`frontend/src/ItemDetail.jsx`): read view moves into a
+  panel card; review history becomes a small dot-and-line **timeline**
+  (filled dot = reviewed, hollow = skipped) instead of plain rows. Delete
+  now uses a new `--color-almanac-danger` token instead of reusing the gold
+  accent — a destructive action shouldn't share a color with primary ones.
+  Same `getItem`/`updateItem`/`deleteItem` logic, same native-`confirm()`
+  delete.
+- **`Pagination.jsx`** (shared by Dashboard's All Items view and
+  AdminPanel): restyled once since both consumers benefit; its old
+  `.pagination`/`.pagination button` App.css rules are dead and removed.
+- **Mobile-responsive pass**: an explicit check at 375px/768px (not done
+  for the history page originally — worth doing for AdminPanel too) found
+  one real bug: the shared header's nav row had no `flex-wrap`, so "Due &
+  reviews" broke mid-phrase on a phone instead of wrapping as a whole item.
+  Fixed in `AlmanacShell.jsx`; desktop/tablet checked and unaffected.
+
 **Three gotchas a next session needs to know, all bitten at least once already:**
 
 1. **`App.css` has bare element selectors** (`button {}`, `h1 {}`, `form {}`,
@@ -319,24 +364,35 @@ Done, live-verified in a browser, backend tests passing (19/19):
    fallback rule for Tailwind-styled markup, it needs the same
    `@layer utilities` wrapper.
 
-### 10b. Not yet built: restyling the rest of the app
+### 10b. Not yet built: AdminPanel (the last screen)
 
-Explicitly deferred this session (confirmed with the user): Dashboard,
-AuthForm, ItemDetail, and AdminPanel still use the original hand-written
-`App.css` look, completely untouched. `design/review-history-demo.html`
-only ever covered the history page — there is **no approved Almanac layout
-for these four screens yet**. Restyling them (and revisiting their user
-flow/UX, not just their color palette) is the next phase of this redesign,
-and needs its own design pass before implementation — the same
-"design-lock before code" process this session followed for the history
-page, not a straight port of one screen's tokens onto four different
-screens' layouts.
+`AdminPanel.jsx` is the only screen still on the original hand-written
+`App.css` look — a paginated user list with Suspend/Unsuspend. It's
+currently wrapped in a temporary `<div className="app">` inside
+`Dashboard.jsx`'s `view === 'admin'` branch so it keeps working
+unconverted; **drop that wrapper once it's restyled** (grep
+`className="app"` in `frontend/src` first — it should be the only hit
+left).
+
+Same process as the other three screens: a design-lock pass first (mockup
+options as a fresh HTML Artifact, not a straight port of Dashboard's
+tokens), pick a direction, then build — reusing whatever shell/pill-tab/
+panel-card/list-row conventions the other screens already settled on
+rather than inventing new ones. After building: remove the `.app` wrapper,
+re-check `App.css` for now-dead rules (the same way `.pagination`,
+`.item-text`, `.detail-subhead` etc. got deleted as each earlier screen
+converted), and re-run the mobile-viewport check (375px/768px) before
+calling it done.
+
+Once AdminPanel lands, `App.css` should be almost entirely deletable and
+this whole §10 can be marked fully built.
 
 **Direction — "Almanac":** deep indigo (`#1B1F3B`) background, gold accent
 (`#E8C468`), Big Caslon/Didot serif for display type, Optima/Futura for body
-(all with system-font fallbacks — no webfonts loaded). Full light-mode token
-set already worked out (both in the demo file and now for real in
-`frontend/src/index.css`). Two other directions were explored and rejected:
+(all with system-font fallbacks — no webfonts loaded). Full token set (both
+modes) is real code now in `frontend/src/index.css`, including
+`--color-almanac-danger` added during the ItemDetail pass for destructive
+actions. Two other directions were explored and rejected before Almanac:
 a "Lab Notebook" concept (dropped — its signature idea needed a
 memory-retention curve the schema can't honestly support, see §"why" below)
 and a "Trail" forest/orange concept (palette liked, but ultimately not
@@ -348,7 +404,11 @@ comparing this week's vs. last week's review count are the two considered
 worth keeping — both computed from existing data, no new state. Rank titles
 and milestone toasts were discussed and explicitly set aside as reading like
 "a game skin bolted onto a study tool" rather than something native to the
-design — revisit only if asked for directly.
+design — revisit only if asked for directly. **Open question, not yet
+decided:** whether the weekly recap is in scope for this restyle pass —
+asked once, the answer was "decide after seeing Dashboard built"; Dashboard
+is built now, so this is still live and worth raising with the user before
+or after AdminPanel.
 
 ## 11. Running it
 
