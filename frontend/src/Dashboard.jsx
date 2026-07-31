@@ -173,18 +173,13 @@ export default function Dashboard({ token, user }) {
   }
 
   if (selectedId) {
-    // ponytail: ItemDetail/AdminPanel haven't had their own Almanac pass yet
-    // (§10b, next chunks) -- this .app wrapper keeps App.css's old look
-    // working for them in the meantime. Drop it once ItemDetail is restyled.
     return (
-      <div className="app">
-        <ItemDetail
-          token={token}
-          itemId={selectedId}
-          onBack={() => setSelectedId(null)}
-          onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
-        />
-      </div>
+      <ItemDetail
+        token={token}
+        itemId={selectedId}
+        onBack={() => setSelectedId(null)}
+        onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
+      />
     );
   }
 

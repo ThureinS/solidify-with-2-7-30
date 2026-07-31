@@ -20,6 +20,7 @@
   --color-almanac-accent: #e8c468;
   --color-almanac-border: #2e3460;
   --color-almanac-moon-dark: #262b52;
+  --color-almanac-danger: #d9776a;
 
   --font-display: 'Big Caslon', Didot, Georgia, serif;
   --font-body: Optima, Futura, ui-sans-serif, sans-serif;
@@ -33,6 +34,7 @@
   --color-almanac-accent: #b8860f;
   --color-almanac-border: #d8dcee;
   --color-almanac-moon-dark: #d6dcf0;
+  --color-almanac-danger: #b8412f;
 }
 
 @media (prefers-color-scheme: light) {
@@ -44,6 +46,7 @@
     --color-almanac-accent: #b8860f;
     --color-almanac-border: #d8dcee;
     --color-almanac-moon-dark: #d6dcf0;
+    --color-almanac-danger: #b8412f;
   }
 }
 
@@ -71,4 +74,31 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+}
+
+/* The one slice of Preflight kept despite skipping the rest of it (see the
+   comment above): without it, form controls don't inherit ANY typography
+   from an ancestor -- buttons render at the browser's own font/size (Arial,
+   ~13px regardless of a parent's text-sm) and textareas specifically default
+   to monospace, unless a Tailwind class overrides it directly.
+   Must live in `layer(utilities)`, the same layer Tailwind's own utility
+   classes load into above -- an unlayered version of this rule would beat
+   text-sm/text-almanac-mute/etc. unconditionally regardless of specificity
+   (unlayered CSS always wins over layered CSS), silently undoing every
+   button's explicit size/color. Inside the same layer, normal specificity
+   applies instead: a bare `button` selector loses to a class like `.text-sm`
+   when both are present, and only fills the gap when nothing more specific
+   is set -- which is what actually happened when this was first written
+   unlayered (caught by comparing computed styles before/after in the
+   browser, not by inspection). Harmless for the still-old-style .app
+   screens too: :where(.app) button is unlayered, so it keeps winning there
+   regardless of this rule's layer. */
+@layer utilities {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
 }

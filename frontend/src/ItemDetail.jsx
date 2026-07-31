@@ -50,11 +50,19 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
 
   if (!item) {
     return (
-      <div>
-        <button type="button" className="link" onClick={onBack}>
+      <div className="max-w-2xl mx-auto flex flex-col gap-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start bg-transparent border-0 p-0 text-sm text-almanac-mute cursor-pointer hover:text-almanac-accent"
+        >
           &larr; Back
         </button>
-        {error ? <p className="error">{error}</p> : <p>Loading&hellip;</p>}
+        {error ? (
+          <p className="text-sm text-almanac-accent">{error}</p>
+        ) : (
+          <p className="text-sm text-almanac-mute">Loading&hellip;</p>
+        )}
       </div>
     );
   }
@@ -66,60 +74,100 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
       : STAGE_LABELS[item.stage];
 
   return (
-    <div>
-      <button type="button" className="link" onClick={onBack}>
+    <div className="max-w-2xl mx-auto flex flex-col gap-7">
+      <button
+        type="button"
+        onClick={onBack}
+        className="self-start bg-transparent border-0 p-0 text-sm text-almanac-mute cursor-pointer hover:text-almanac-accent"
+      >
         &larr; Back to list
       </button>
 
-      {editing ? (
-        <form onSubmit={handleSave}>
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={8}
-            required
-          />
-          <div className="item-actions">
-            <button type="submit">Save</button>
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <p className="item-text">{item.text}</p>
-          <p className="stage-label">
-            {statusLabel} &middot; added {item.dateAdded} &middot; next review {item.nextReviewDate}
-          </p>
-
-          {!item.deletedAt && (
-            <div className="item-actions">
-              <button type="button" onClick={startEditing}>
-                Edit
+      <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6 flex flex-col gap-3">
+        {editing ? (
+          <form onSubmit={handleSave} className="flex flex-col gap-3">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={8}
+              required
+              className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-bg border border-almanac-border rounded-lg resize-y leading-relaxed"
+            />
+            <div className="flex gap-2.5">
+              <button
+                type="submit"
+                className="rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+              >
+                Save
               </button>
-              <button type="button" className="danger" onClick={handleDelete}>
-                Delete
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+              >
+                Cancel
               </button>
             </div>
-          )}
-        </>
-      )}
+          </form>
+        ) : (
+          <>
+            <p className="text-base leading-relaxed whitespace-pre-wrap m-0">{item.text}</p>
+            <p className="text-sm text-almanac-mute m-0">
+              {statusLabel} &middot; added {item.dateAdded} &middot; next review {item.nextReviewDate}
+            </p>
 
-      {error && <p className="error">{error}</p>}
+            {!item.deletedAt && (
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-almanac-accent">{error}</p>}
 
       {item.reviews.length > 0 && (
-        <>
-          <h2 className="detail-subhead">Review history</h2>
-          <ul className="due-list">
-            {item.reviews.map((review) => (
-              <li key={review.id}>
-                <span>{review.date}</span>
-                <span className="stage-label">{review.result}</span>
+        <div>
+          <h2 className="font-display text-lg font-medium mb-3">Review history</h2>
+          <ul className="list-none p-0 m-0">
+            {item.reviews.map((review, i) => (
+              <li key={review.id} className="flex gap-3.5 pb-4 last:pb-0">
+                <div className="flex flex-col items-center flex-none">
+                  <span
+                    className={
+                      review.result === 'REVIEWED'
+                        ? 'w-2.5 h-2.5 rounded-full mt-1 flex-none bg-almanac-accent'
+                        : 'w-2.5 h-2.5 rounded-full mt-1 flex-none bg-transparent border border-almanac-mute'
+                    }
+                  />
+                  {i < item.reviews.length - 1 && (
+                    <span className="flex-1 w-px bg-almanac-border mt-1" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-sm">{review.date}</div>
+                  <div className="text-xs text-almanac-mute">
+                    {review.result === 'REVIEWED' ? 'Reviewed' : 'Skipped'}
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
     </div>
   );

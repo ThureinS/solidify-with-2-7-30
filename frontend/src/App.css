@@ -4,60 +4,14 @@
   padding: 3rem 1.5rem 4rem;
 }
 
-/* Scoped under :where(.app) -- not bare element selectors, and not plain
-   ".app <el>" -- so these rules stay confined to the pre-Almanac screens
-   (always wrapped in <main className="app">) without leaking into the new
-   Tailwind-styled pages, which reuse the same HTML elements (button, h1,
-   ...) with their own look. :where() contributes zero specificity, so this
-   scoping doesn't change how these rules rank against the more specific
-   overrides below (e.g. button.secondary) -- only ".app" as a bare class
-   selector would have, by adding an extra type-selector's worth of weight. */
-:where(.app) h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
-:where(.app) form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-:where(.app) label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-}
-
-:where(.app) input,
-:where(.app) select,
-:where(.app) textarea {
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-:where(.app) textarea {
-  resize: vertical;
-  line-height: 1.5;
-}
-
-:where(.app) input:focus,
-:where(.app) select:focus,
-:where(.app) textarea:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
+/* Scoped under :where(.app) -- not a bare element selector, and not plain
+   ".app <el>" -- so these rules stay confined to AdminPanel, the one screen
+   still on the old look (§10b), without leaking into the Tailwind-styled
+   screens, which reuse the same <button> element with their own look.
+   :where() contributes zero specificity, so this scoping doesn't change how
+   these rules rank against the more specific overrides below (e.g.
+   button.secondary) -- only ".app" as a bare class selector would have, by
+   adding an extra type-selector's worth of weight. */
 :where(.app) button {
   padding: 0.75rem 1.25rem;
   font-size: 1rem;
@@ -78,22 +32,6 @@
 :where(.app) button:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-/* .link, not button.link -- react-router's <Link> renders an <a>, which
-   needs the same treatment as the plain-text buttons using this class
-   (Dashboard's "Review history" nav link is an <a>, not a <button>). */
-:where(.app) .link {
-  background: none;
-  color: var(--color-text-muted);
-  text-decoration: underline;
-  padding: 0;
-  align-self: flex-start;
-}
-
-:where(.app) .link:hover:not(:disabled) {
-  background: none;
-  color: var(--color-text);
 }
 
 :where(.app) button.secondary {
@@ -119,10 +57,6 @@
 
 .error {
   color: var(--color-error);
-}
-
-.success {
-  color: var(--color-success);
 }
 
 .due-list {
@@ -164,15 +98,4 @@
 .item-actions button {
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
-}
-
-.item-text {
-  white-space: pre-wrap;
-  margin: 1rem 0 0.5rem;
-}
-
-.detail-subhead {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 2rem 0 0.75rem;
 }

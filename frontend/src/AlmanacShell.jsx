@@ -4,7 +4,7 @@ const navLinkClass = ({ isActive }) =>
   `no-underline hover:text-almanac-accent ${isActive ? 'text-almanac-accent' : 'text-almanac-mute'}`;
 
 const chromeButtonClass =
-  'bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-almanac-mute hover:text-almanac-accent';
+  'bg-transparent border-0 p-0 cursor-pointer text-almanac-mute hover:text-almanac-accent';
 
 // The one bar every screen shares -- brand, nav, the light/dark override,
 // and logout -- so they're reachable no matter which screen is on top
