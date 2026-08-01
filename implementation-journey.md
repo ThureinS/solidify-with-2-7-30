@@ -2216,3 +2216,89 @@ Both of the open items from this session's review were decided and built:
   viewport (`min-h-[70vh]` + `items-center`), plus a heading and a one-line
   description of the 2-7-30 idea inside the card. Checked at desktop and at
   375px; the heading wraps to two lines on mobile and the layout holds.
+
+## 2026-08-01 (same day, later) — Naming, and auditing the four Dashboard stats
+
+**What was built**
+
+- **The app is now called `2-7-30`.** After the earlier rename to the
+  descriptive "Spaced Repetition Tracker", we went one step further: the
+  schedule *is* the product, so the schedule is the name. It's unique in a
+  way no English word is, it's already the repo slug, and it explains itself
+  the moment anyone asks. Candidates researched and rejected: *Lunation* (taken
+  several times over by period-tracking and astrology apps), *Commonplace*
+  (good fit — a commonplace book is literally a notebook of what you learned —
+  but obscure), *Reprise*/*Revisit*. **The whole moon-themed branch was ruled
+  out on principle:** we had just renamed *away* from a palette-derived name,
+  so picking Crescent or Moondial would have reintroduced the same mismatch.
+  Visible strings only; the `almanac-*` color tokens keep their name, and the
+  repo/Vercel slugs were deliberately left alone (changing them changes the
+  deploy URLs, which are written into `developer-handover.md`).
+- **A typography fix the rename forced:** the display serif uses *old-style
+  figures*, where `0` is drawn small and sits below the baseline. Fine in
+  prose, but the wordmark is digits now and "2-7-30" was reading as "2-7-3o".
+  Adding `lining-nums` makes all digits full height.
+- **An audit of the four numbers on the Dashboard stat row**, prompted by you
+  saying they felt "fishy". They were.
+
+**Key decisions and why**
+
+- **The arithmetic was right; two of the labels were wrong.** Checked every
+  number directly against the database with SQL rather than trusting the code:
+  127 reviewed + 33 skipped in 2026 = 79%, this week 6, last week 12, streak
+  14. All correct. The bugs were in what the words *claimed* those numbers
+  meant.
+- **"79% completion this year" → "79% reviewed rather than skipped this
+  year".** The number is `reviewed / (reviewed + skipped)`. It never looks at
+  what was *due*. Review 3 items all year, skip nothing, ignore 500 others,
+  and it proudly reports 100% completion. Exactly the same defect as the
+  history legend's old "All reviewed" — a label asserting more than the data
+  can support. A tooltip now spells out the limitation.
+- **The weekly recap compared a partial week against a complete one.** "6 this
+  week, down from 12 last week" measured Mon–Sat against a full Mon–Sun, so
+  the verb was close to meaningless: a partial week almost always loses, and on
+  a Monday morning it was guaranteed to say "down from". Now both sides measure
+  Monday-through-the-current-weekday, and the copy says "by this point last
+  week" to make the like-for-like explicit. Against the same data the honest
+  comparison is 6 vs **11**, not 6 vs 12.
+- **Streak and completion deliberately disagree about skips** — the streak
+  counts a skip as showing up, the review/skip ratio counts it on the negative
+  side. That's intentional and already documented in `items.service.js`: the
+  streak asks "did you turn up?", the ratio asks "did you get through it?".
+  Two different honest questions, which is why they don't have to match.
+
+**Problems hit and how they were solved**
+
+- **The week logic had no test, and one screenshot only proves one weekday.**
+  The change was date-window arithmetic — exactly the kind that breaks silently
+  at boundaries — and Saturday is the easiest case. `computeWeeklyRecap` was
+  therefore moved out of `Dashboard.jsx` into its own `weeklyRecap.js`, purely
+  so a test could import it without dragging in React and the API client, and
+  `tests/weeklyRecap.test.js` now pins the Monday, Sunday and mid-week cases.
+- **The test was checked by deliberately breaking the code.** Reverting the
+  fix made exactly 2 assertions fail; restoring it made all 30 pass. A test
+  that has never been seen to fail isn't yet known to test anything.
+
+**New concepts introduced**
+
+- **Old-style vs. lining figures**: many serif typefaces draw numerals at
+  varying heights, like lowercase letters, so they sit comfortably inside
+  running prose. `font-variant-numeric: lining-nums` forces them all to
+  cap height instead — which is what you want any time digits are a *label*
+  rather than part of a sentence.
+- **Mutation testing, in miniature**: break the code on purpose and confirm
+  the test notices. It's the only way to distinguish a test that guards the
+  logic from one that merely runs it.
+- **A denominator you don't have is a denominator you can't report.** Every
+  "% complete" needs to answer "percent of *what*". When the app never
+  recorded what was due on a past day, no honest percentage exists, and the
+  fix is to describe what you *did* measure.
+
+**You should be able to explain**
+
+1. Why is `reviewed / (reviewed + skipped)` not a completion rate, and what
+   would the app have to store for a real one to be possible?
+2. Why did the old weekly recap say "down from" almost every day, and what
+   makes the new comparison fair?
+3. Why does a skipped item keep your streak alive but count against the
+   reviewed/skipped ratio — and why is that not a contradiction?

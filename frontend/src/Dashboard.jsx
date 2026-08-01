@@ -12,6 +12,7 @@ import {
 import ItemDetail from './ItemDetail';
 import AdminPanel from './AdminPanel';
 import Pagination from './Pagination';
+import { computeWeeklyRecap } from './weeklyRecap';
 
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
 
@@ -22,49 +23,6 @@ function tabClass(active) {
   return active
     ? 'rounded-full px-4 py-1.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border border-almanac-accent cursor-pointer'
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
-}
-
-const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
-
-// Calendar week = Monday-Sunday. "This week" only counts through today (the
-// week isn't over yet); "last week" is the full prior Mon-Sun. Both sums come
-// from the `days` array Dashboard already fetches for the other stats -- no
-// extra request.
-//
-// Known gap, accepted rather than fixed: `days` is scoped to one calendar year
-// (see getReviewHistory), so in the first few days of January part of "last
-// week" (sometimes "this week" too) can fall in December of the previous,
-// un-fetched year and silently read as 0 activity there. Only matters ~1 week
-// a year.
-function computeWeeklyRecap(days, today) {
-  const [y, m, d] = today.split('-').map(Number);
-  const todayDate = new Date(y, m - 1, d);
-  const mondayOffset = (todayDate.getDay() + 6) % 7; // days since this week's Monday
-  const weekStart = new Date(todayDate);
-  weekStart.setDate(weekStart.getDate() - mondayOffset);
-  const lastWeekEnd = new Date(weekStart);
-  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-  const lastWeekStart = new Date(lastWeekEnd);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 6);
-
-  const toDateStr = (dt) =>
-    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-  const sum = (startStr, endStr) =>
-    days
-      .filter((day) => day.date >= startStr && day.date <= endStr)
-      .reduce((total, day) => total + day.reviewCount + day.skipCount, 0);
-
-  const thisWeekCount = sum(toDateStr(weekStart), today);
-  const lastWeekCount = sum(toDateStr(lastWeekStart), toDateStr(lastWeekEnd));
-  if (thisWeekCount + lastWeekCount === 0) return null; // nothing to compare yet
-
-  const verb = thisWeekCount > lastWeekCount ? 'up from' : thisWeekCount < lastWeekCount ? 'down from' : 'same as';
-  return {
-    thisWeekCount,
-    lastWeekCount,
-    verb,
-    rangeLabel: `${SHORT_DATE.format(weekStart)}–${SHORT_DATE.format(todayDate)}`,
-  };
 }
 
 export default function Dashboard({ token, user }) {
@@ -239,14 +197,23 @@ export default function Dashboard({ token, user }) {
               dropped off this list, so this is the remainder -- History's
               "x of y handled" counts the same day's full workload. */}
           {dueItems.length} left today
-          {completionRate !== null && ` · ${completionRate}% completion this year`}
+          {/* NOT "completion": this is reviewed / (reviewed + skipped) across the
+              actions you logged. It has no idea what was due, so it can't be a
+              completion rate -- review 3 items all year and skip nothing and it
+              reads 100%. Items you never opened write no row and are invisible
+              here, by the same limitation as the history grid's legend. */}
+          {completionRate !== null && (
+            <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
+              {` · ${completionRate}% reviewed rather than skipped this year`}
+            </span>
+          )}
           {!!streak && (
             <span title="Any day you reviewed or skipped something keeps the streak going.">
               {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
             </span>
           )}
           {weeklyRecap &&
-            ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} last week`}
+            ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
         </span>
       </div>
 

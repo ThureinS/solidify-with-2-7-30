@@ -37,7 +37,10 @@ export default function AuthForm({ onLoggedIn }) {
     <div className="flex justify-center items-center min-h-[70vh] py-10">
       <div className="w-full max-w-[340px] bg-almanac-panel border border-almanac-border rounded-2xl px-8 py-8 flex flex-col gap-5">
         <div className="flex flex-col gap-1.5 text-center">
-          <h1 className="font-display text-2xl font-medium">Spaced Repetition Tracker</h1>
+          {/* The name is the schedule, so the line under it has to do the
+              explaining -- this is the only place a first-time visitor is told
+              what "2-7-30" means. */}
+          <h1 className="font-display text-3xl font-medium tracking-wide lining-nums">2-7-30</h1>
           <p className="text-sm text-almanac-mute leading-relaxed">
             Write down what you learned. Review it after 2 days, 7 days, then 30.
           </p>
