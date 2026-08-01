@@ -47,3 +47,25 @@ describe('computeWeeklyRecap', () => {
     expect(computeWeeklyRecap([day('2026-01-05', 4)], '2026-08-01')).toBe(null);
   });
 });
+
+// The January boundary: Dashboard is responsible for supplying the previous
+// year's days when the window crosses into it. These pin the contract that
+// makes that necessary -- the window really does reach back across New Year.
+describe('computeWeeklyRecap across the year boundary', () => {
+  it('reads December activity when the caller supplies it', () => {
+    // 2027-01-03 is a Sunday: this week is Mon 2026-12-28 .. Sun 2027-01-03,
+    // and the comparable slice of last week is Mon 12-21 .. Sun 12-27.
+    const days = [day('2026-12-21', 4), day('2026-12-28', 2), day('2027-01-02', 1)];
+    const recap = computeWeeklyRecap(days, '2027-01-03');
+    expect(recap.thisWeekCount).toBe(3); // 12-28 and 01-02
+    expect(recap.lastWeekCount).toBe(4); // 12-21
+  });
+
+  it('silently reads zero if the caller only supplies the current year', () => {
+    // Documents the failure mode Dashboard's extra fetch exists to prevent:
+    // same day, same real activity, but December withheld.
+    const recap = computeWeeklyRecap([day('2027-01-02', 1)], '2027-01-03');
+    expect(recap.thisWeekCount).toBe(1); // the 12-28 activity has vanished
+    expect(recap.lastWeekCount).toBe(0);
+  });
+});

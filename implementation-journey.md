@@ -2302,3 +2302,82 @@ Both of the open items from this session's review were decided and built:
    makes the new comparison fair?
 3. Why does a skipped item keep your streak alive but count against the
    reviewed/skipped ratio — and why is that not a contradiction?
+
+## 2026-08-02 — Closing the January gap, and catching the docs up with the app
+
+**What was built**
+
+Three cleanup items, chosen after auditing what was actually left. No new
+features — the app had drifted *ahead of its own documentation*, which is
+the kind of gap an outside reader notices first.
+
+1. **The weekly recap's January year-boundary gap is now fixed**, not merely
+   documented. `refreshStats()` fetches the previous year's history as well
+   on Jan 1–13, and merges it before computing the recap.
+2. **`developer-handover.md` caught up**: a new §10c recording yesterday's
+   rename and stat-row audit in full, a naming note at the top of §10 (the
+   *palette* is Almanac, the *product* is 2-7-30 — the doc uses both words
+   and never explained the difference), and a correction to §12a's deploy
+   checklist, which still told a future reader to expect the old
+   `"100% completion this year"` string on screen.
+3. **`user-manual.md` rewritten.** It was 105 lines describing an app that no
+   longer existed: no History page, no streak, no daily goal, no weekly
+   recap, no light/dark toggle, and the wrong name at the top.
+
+**Key decisions and why**
+
+- **Jan 1–13, not "the first week of January".** The recap looks back at most
+  13 days — on a Sunday that's 6 days to this week's Monday plus 7 more — so
+  Jan 13 is the last date whose window can still touch the previous year. The
+  bound is derived from the window, not guessed, and the comment says how.
+- **Only fetch the extra year on the days it can matter.** A second request
+  on ~13 days a year is invisible; a second request on all 365 is waste. The
+  original decision (accept the gap, don't fetch) was reasonable when this
+  was a fresh feature; it stopped being reasonable once the whole session had
+  been about numbers quietly reporting the wrong thing. A New Year that
+  silently reads as "your effort collapsed" is exactly that failure again.
+- **Checked the streak for the same bug — it doesn't have it.**
+  `getCurrentStreak` queries all-time on purpose, unlike `getReviewHistory`'s
+  one-year scope, so a streak spanning Dec 31 → Jan 1 survives. Worth the
+  30 seconds it took to confirm rather than assume, since a year-scoped
+  streak would have reset *everyone* to 1 every New Year's Day.
+- **The manual documents the limitations, not just the buttons.** It now
+  explains why "left today" and History's "of 5 handled" legitimately differ,
+  why the streak and the reviewed-rather-than-skipped share can disagree, and
+  why a full moon does not mean "got everything done". Those were the exact
+  three things that looked broken to a first-time user, so answering them in
+  writing is cheaper than answering them again.
+- **Behaviour was verified before being written down.** `applySkip` was read
+  directly to confirm a skip pushes the due date by exactly one day and never
+  changes the review stage, and the password rules were read out of
+  `auth.schemas.js`, rather than trusting the old manual's wording. A manual
+  that confidently describes the wrong behaviour is worse than no manual.
+
+**Problems hit and how they were solved**
+
+- **The new January path can't be exercised today**, since it only runs in
+  January. Rather than leave it entirely unchecked, the two year-boundary
+  cases were pinned as unit tests: one proving the recap reads December
+  correctly *when the caller supplies those days*, and one documenting the
+  exact failure mode — same date, same activity, December withheld, and the
+  numbers silently drop to near zero. The second test is really a description
+  of the bug, kept executable so nobody re-accepts it by accident.
+
+**New concepts introduced**
+
+- **Deriving a bound instead of picking one**: "Jan 1–13" isn't a guess or a
+  safety margin, it's the largest date whose 13-day lookback still crosses the
+  year. When a constant encodes a rule, write down the arithmetic that
+  produced it — otherwise the next person tightens or loosens it blindly.
+- **Documentation drift**: code changes in one commit, prose describing it
+  doesn't, and the two silently disagree. It's invisible from inside the
+  codebase and glaring to anyone arriving new — the same shape of problem as
+  a mislabelled statistic, one layer out.
+
+**You should be able to explain**
+
+1. Why is the extra history fetch limited to January 1–13, and where does 13
+   come from?
+2. Why doesn't the streak need the same fix the weekly recap needed?
+3. Why does the user manual spend as much space on what the numbers *can't*
+   tell you as on what they can?

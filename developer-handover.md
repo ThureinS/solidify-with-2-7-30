@@ -217,6 +217,15 @@ sending a fake date — fine for a personal tool.
 
 ## 10. Frontend redesign — Almanac (design locked 2026-07-25; history page built same day)
 
+> **Naming, to avoid confusion while reading this section.** "Almanac" is the
+> name of the **visual direction** — indigo night sky, gold accent, moon-phase
+> history — and it survives in the `almanac-*` Tailwind tokens and in
+> `AlmanacShell.jsx`. The **product** is called **2-7-30** (renamed
+> 2026-08-01, see §10c): the schedule is the thing the app actually is, and
+> the old wordmark described the palette rather than the product. The tokens
+> were deliberately *not* renamed — they're internal, and touching every
+> `className` in every component buys nothing a user can see.
+
 A full frontend visual + UX revamp was scoped and design-explored in a
 dedicated session (see `implementation-journey.md`, 2026-07-25 entries, for
 the full back-and-forth and build log). A static, self-contained reference
@@ -414,21 +423,96 @@ and milestone toasts were discussed and explicitly set aside as reading like
 design — revisit only if asked for directly.
 
 **Weekly recap: built 2026-07-31**, in its own dedicated session as decided
-the same day. `computeWeeklyRecap(days, today)` in `Dashboard.jsx` — a pure
-function, same shape as the backend's `deriveReviewHistory` — derives it
-from the `history.days` array `refreshStats()` already fetches, no new
-fetch or endpoint. Calendar week (Mon–Sun), not a rolling 7-day window;
-renders as one more clause on the existing plain-text stat line, e.g. "5
-handled this week (Jul 27–Jul 31), down from 11 last week". Known, accepted
-limitation: `getReviewHistory` fetches one calendar year at a time, so in
-years where Jan 1 isn't a Monday (6 years out of 7), the calendar week
-containing New Year's straddles the year boundary — for the first few days
-of January, part of "last week" (or "this week") can fall in the previous,
-un-fetched year and silently read as 0 there. Not worth a second fetch for
-~1 week/year; see `implementation-journey.md`'s 2026-07-31 weekly-recap
-entry for the full reasoning and verification (checked against the
-`stats-test@example.com` seed fixture, hand-computed against
-`scripts/seed-test-data.js`'s own pattern).
+the same day. `computeWeeklyRecap(days, today)` — a pure function, same shape
+as the backend's `deriveReviewHistory` — derives it from the `history.days`
+array `refreshStats()` already fetches, no new endpoint. Calendar week
+(Mon–Sun), not a rolling 7-day window; renders as one more clause on the
+existing plain-text stat line.
+
+**Both of this section's original caveats were resolved on 2026-08-01
+(§10c) — read that before trusting the example strings above.** The function
+now lives in its own module, `frontend/src/weeklyRecap.js`, so
+`tests/weeklyRecap.test.js` can import it without pulling in React; the two
+weeks are compared over the *same* slice rather than partial-vs-complete;
+and the January year-boundary gap is fixed in `refreshStats()` rather than
+being accepted.
+
+### 10c. First outside walkthrough — rename, and the stat-row audit (2026-08-01)
+
+The app was clicked through end-to-end by someone who hadn't built it, for
+the first time. Six observations came back; four were defects. All fixed,
+verified in a browser against a locally seeded database, and deployed the
+same day (commits `fe5636c`, `b1ec8e2`, `5b7f809`).
+
+**Two rendering bugs.**
+
+- The History page's "today" moon was **inverted**. `moonStyle()`'s fill
+  table ran `[64, 44, 32, 18, 0]`, so index 0 — nothing handled — painted the
+  entire 64px disc gold, visually identical to "everything done". Now
+  `[0, 18, 32, 44]` with the full-disc case branching separately, so the moon
+  *waxes*. The same defect was in the approved reference file
+  `design/review-history-demo.html` (its base `.moon-today` rule carried
+  `inset 64px` and `.p0` never overrode it) and was fixed there too —
+  otherwise the next port reintroduces it. **Worth internalising:** an inset
+  `box-shadow` with a positive x-offset fills the element from the *left*, so
+  an offset equal to the width covers all of it.
+- The **"Today" card changed its numbers with the year selector** — "1 of 5
+  handled" on 2026, "0 of 4" on 2025. It looked today's date up inside the
+  year-scoped `days` map, which on any past year simply doesn't contain
+  today. Today now has its own state, populated only from the current-year
+  load.
+
+**Two labels that claimed more than the data supports.** This turned out to
+be the theme of the session, and it's the thing to watch for in any new stat:
+
+- Grid legend said **"All reviewed"** → **"Reviewed, no skips"**. A full moon
+  only means every *logged action* that day was a review. Items never touched
+  write no row at all, so they cannot be counted.
+- Stat row said **"79% completion this year"** → **"79% reviewed rather than
+  skipped this year"** (plus a `title` tooltip). The number is
+  `reviewed / (reviewed + skipped)` and never looks at what was *due* —
+  review 3 items all year, skip nothing, ignore 500 others, and it reported
+  100% completion.
+- Related: **"N due today" → "N left today"**, because the due list is the
+  remainder after today's reviews, while History's "x of y handled" counts
+  the whole day. Both numbers were right; they looked like a contradiction.
+
+**Weekly recap, reworked.** It compared this week's Mon–today against last
+week's *complete* Mon–Sun, so the up/down verb was close to meaningless — a
+partial week almost always loses, guaranteed on a Monday morning. Both sides
+now measure Monday-through-the-current-weekday and the copy says "by this
+point last week". Against the `stats-test@example.com` fixture the honest
+comparison is 6 vs **11**, not 6 vs 12. The January year-boundary gap this
+section used to accept is also closed: `refreshStats()` fetches the previous
+year as well on Jan 1–13, the only dates whose 13-day window can reach back
+across New Year.
+
+**Naming.** The product is now **2-7-30** — the schedule is what the app
+actually is. *Almanac* named the palette and told a visitor nothing.
+Researched and rejected: *Lunation* (taken by several period-tracking and
+astrology apps), *Commonplace*, *Reprise*. The entire moon-themed branch was
+ruled out on principle — renaming away from a palette-derived name and then
+picking another one reintroduces the same mismatch. **Visible strings only**:
+the `AlmanacShell.jsx` wordmark, the `AuthForm.jsx` heading, and
+`frontend/index.html`'s `<title>`. The `almanac-*` tokens and the GitHub /
+Vercel slugs (`solidify-with-2-7-30`) are unchanged — the slugs are load-
+bearing in this document's URLs.
+
+One typography consequence worth knowing: the display serif uses **old-style
+figures**, which draw `0` small and below the baseline. Fine in prose, but the
+wordmark is digits now and "2-7-30" rendered as "2-7-3o", so both the wordmark
+and the login heading carry `lining-nums`.
+
+**Testing.** `computeWeeklyRecap` had no test, and a screenshot only ever
+proves one weekday. It moved into `frontend/src/weeklyRecap.js` purely so
+`tests/weeklyRecap.test.js` could import it without React or the API client;
+it now pins Monday, Sunday, mid-week and the year boundary. The tests were
+checked by deliberately reverting the fix and confirming they fail.
+
+**Not a bug, but know it before demoing:** `scripts/seed-test-data.js` seeds a
+clean 8-day streak *including today*, so a freshly seeded account already has
+one review logged and never shows the new-moon state. Reseed on the morning
+of a demo — the whole fixture is relative to the day it runs.
 
 ## 11. Running it
 
@@ -483,7 +567,10 @@ swallows stat-fetch errors (`.catch(() => {})`), that combination fails
    (`https://solidify-with-2-7-30-7dc4.vercel.app`) as `demo@example.com` →
    Dashboard renders in the Almanac look (segmented Login/Register toggle
    confirmed it's the new build, not a stale cache) and shows "0 due today
-   · 100% completion this year" with no console errors. Streak and the new
+   · 100% completion this year" with no console errors. **Both of those
+   strings were changed on 2026-08-01 (§10c) — a repeat of this check should
+   expect "0 left today · 100% reviewed rather than skipped this year".**
+   Streak and the new
    weekly recap clause both correctly stayed hidden — `demo@example.com`'s
    seed data (from `prisma/seed.js`) has no activity in the current streak
    window or this/last calendar week, so both null-guards did their job

@@ -74,7 +74,20 @@ export default function Dashboard({ token, user }) {
       setStreak(history.currentStreak);
       const todayEntry = history.days.find((d) => d.date === today);
       setHandledToday((todayEntry?.reviewCount ?? 0) + (todayEntry?.skipCount ?? 0));
-      setWeeklyRecap(computeWeeklyRecap(history.days, today));
+
+      // The recap reaches back at most 13 days (on a Sunday: 6 days to this
+      // week's Monday, then 7 more), so up to and including Jan 13 part of the
+      // window sits in the previous calendar year. getReviewHistory is scoped
+      // to one year, so those days would silently read as zero activity and the
+      // comparison would look like a collapse in effort every New Year. Fetch
+      // last year's tail only on the days it can actually matter.
+      let recapDays = history.days;
+      const [, month, dayOfMonth] = today.split('-').map(Number);
+      if (month === 1 && dayOfMonth <= 13) {
+        const previous = await getReviewHistory(token, Number(today.slice(0, 4)) - 1);
+        recapDays = [...previous.days, ...history.days];
+      }
+      setWeeklyRecap(computeWeeklyRecap(recapDays, today));
     } catch {
       // a stat row failing silently isn't worth surfacing as a page error
     }

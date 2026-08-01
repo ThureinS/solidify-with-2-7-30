@@ -11,11 +11,10 @@ const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'nu
 // Lives in its own file, not in Dashboard.jsx, purely so tests/weeklyRecap.test.js
 // can import it without dragging in React and the API client.
 //
-// Known gap, accepted rather than fixed: `days` is scoped to one calendar year
-// (see getReviewHistory), so in the first few days of January part of "last
-// week" (sometimes "this week" too) can fall in December of the previous,
-// un-fetched year and silently read as 0 activity there. Only matters ~1 week
-// a year.
+// `days` must already cover every date in the window -- up to 13 days back
+// from `today`. That's the caller's job, and it matters in early January,
+// when part of the window is in the previous calendar year and the history
+// endpoint only returns one year at a time (see Dashboard's refreshStats).
 export function computeWeeklyRecap(days, today) {
   const [y, m, d] = today.split('-').map(Number);
   const todayDate = new Date(y, m - 1, d);
