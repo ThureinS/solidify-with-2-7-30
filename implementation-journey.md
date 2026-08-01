@@ -2197,3 +2197,22 @@ The four fixes:
    actually did, when it can tell you that for today?
 3. The Dashboard says "4 left today" and History says "1 of 5 handled". Why
    are both correct at the same time?
+
+**Follow-up the same day — the two design questions**
+
+Both of the open items from this session's review were decided and built:
+
+- **The wordmark now says "Spaced Repetition Tracker."** "Almanac" was the
+  name of the *palette* — indigo night sky, moon-phase history — and it
+  never described the product to anyone landing on the page. Only the
+  visible strings changed. The Tailwind color tokens are still `almanac-*`,
+  deliberately: those names are internal, nobody sees them, and renaming
+  them would touch every `className` in every component for no user-visible
+  benefit. **A visual direction's codename and a product's name are allowed
+  to be different things.**
+- **The login card is vertically centred and now introduces itself.** The
+  card used to be pinned near the top with `pt-10` on an otherwise empty
+  page, which is what read as "floating" — the fix is centring within the
+  viewport (`min-h-[70vh]` + `items-center`), plus a heading and a one-line
+  description of the 2-7-30 idea inside the card. Checked at desktop and at
+  375px; the heading wraps to two lines on mobile and the layout holds.

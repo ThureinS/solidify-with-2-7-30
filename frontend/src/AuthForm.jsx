@@ -32,8 +32,17 @@ export default function AuthForm({ onLoggedIn }) {
   }
 
   return (
-    <div className="flex justify-center pt-10">
+    // min-h + centering, not a top pad: logged out the page is otherwise
+    // empty, so a top-aligned card read as floating in dead space.
+    <div className="flex justify-center items-center min-h-[70vh] py-10">
       <div className="w-full max-w-[340px] bg-almanac-panel border border-almanac-border rounded-2xl px-8 py-8 flex flex-col gap-5">
+        <div className="flex flex-col gap-1.5 text-center">
+          <h1 className="font-display text-2xl font-medium">Spaced Repetition Tracker</h1>
+          <p className="text-sm text-almanac-mute leading-relaxed">
+            Write down what you learned. Review it after 2 days, 7 days, then 30.
+          </p>
+        </div>
+
         <div className="flex border border-almanac-border rounded-full p-1">
           <button type="button" onClick={() => setMode('login')} className={segmentClass(mode === 'login')}>
             Log in
