@@ -2002,3 +2002,95 @@ the stat line already does, no extra CSS needed.
    directly?
 3. Why does comparing `day.date >= startStr` work correctly here without
    ever converting either side to a `Date` object?
+
+## 2026-07-31 (same day, later) — Deploy: pushed, Neon password rotated, prod seeded
+
+Following straight on from the weekly recap session: user said "deploy it,"
+then asked for the two remaining backlog items (§12 of
+`developer-handover.md`) to be finished — the exposed Neon password and
+prod demo data. Both are done now.
+
+**What was done**
+- **Pushed `main`** (`52d42ed` → `41fe4b7`, 24 commits) — both Vercel
+  projects (frontend + backend) auto-redeployed. Verified live: health
+  check, `review-history` with and without `currentStreak`, and the
+  production frontend itself (Almanac look confirmed, no console errors).
+- **Rotated the Neon prod DB password** (exposed in chat 2026-07-18, never
+  rotated until now) — guided step-by-step through the real dashboards
+  (Vercel → Storage → Neon → "Connect" → "Reset password"), since it's all
+  click-through UI, not something to automate blind. Confirmed the old
+  password stopped working immediately (`/auth/login` 500'd), then a
+  Vercel redeploy fixed it — env-var changes don't reach an
+  already-running deployment on their own.
+- **Seeded prod with rich demo data** — `stats-test@example.com`, 164
+  review rows (131 reviewed, 33 skipped), run by the user themselves in
+  their own terminal (not the assistant), since it needs the real,
+  un-redactable Neon connection string. Verified live afterward:
+  `currentStreak: 14` (exact match to the script's own predicted value).
+
+**Key decisions and why**
+- **Dashboard/CLI steps were walked one at a time**, full plan given up
+  front, per this project's established convention for external
+  click-through work — not bundled into one long instruction.
+- **The assistant never ran the prod-seeding command itself**, even though
+  it technically could have (same shell, same machine) — the real Neon
+  connection string must never pass through an AI-assisted channel, same
+  principle as the original password-exposure incident this session was
+  partly fixing.
+- **Diagnostics used length/boolean checks, never full values** — when the
+  seed script failed the first time, debugging it required knowing
+  *something* about the `DATABASE_URL_UNPOOLED` value without ever
+  printing the value itself (e.g. `${#val}` and `[ -z "$val" ]` instead of
+  `echo "$val"`). One diagnostic attempt that did print a small slice was
+  auto-blocked by the environment's safety layer before it went further.
+
+**Problems hit and how they were solved**
+1. **`vercel env pull` could not retrieve `DATABASE_URL_UNPOOLED`'s real
+   value, at all, across three separate attempts** (once via the
+   assistant's tooling, twice in a genuinely fresh Terminal.app session).
+   Every attempt produced the identical 11-character placeholder. Ruled
+   out a chat-display artifact using a boolean-only diagnostic
+   (`[ -z "$val" ]`) that can't leak a real value's content, which still
+   came back non-empty but only 11 characters — proving the *file itself*
+   held a placeholder, not that anything downstream was hiding a real
+   value from view. The actual cause: Neon's Vercel integration marks
+   database credential variables as Vercel **"Sensitive Environment
+   Variables"** — once saved, unreadable through any channel (dashboard or
+   CLI), only usable at runtime. Fixed by getting the real direct
+   connection string from Neon's own console instead (`Connect` → pooling
+   off → `Copy snippet`), pasted by hand into `.env.production`.
+2. **The seed script's `DEMO_PASSWORD` ended up being a literal
+   placeholder-looking string twice** (`yourChosenPassword`, then
+   `pick-your-own-password-here`) — copy-pasted from the example command
+   instead of being replaced with an actual choice. Harmless here (fake
+   demo account, not real user data) but worth a fresh password if this
+   account is ever reseeded.
+
+**New concepts introduced**
+- **Connection pooling (PgBouncer) vs. direct connections**: a serverless
+  platform can spin up many function instances at once, each wanting its
+  own DB connection — more than Postgres's connection ceiling can handle.
+  Neon's pooled endpoint (hostname contains `-pooler`) routes through
+  PgBouncer, which multiplexes many app-level connections onto a small
+  number of real ones. Migrations and bulk seed operations need the
+  *direct/unpooled* endpoint instead, since they depend on Postgres session
+  behavior (locks held for one whole operation) that pooling can quietly
+  break.
+- **Vercel Sensitive Environment Variables**: a real product feature where
+  a saved value can never be read back again through any interface, only
+  used internally at deploy/runtime — explains why `vercel env pull` gave
+  a placeholder instead of a real secret, on purpose, working as designed.
+- **A redeployed app doesn't necessarily pick up an env-var change on its
+  own** — a live serverless deployment's environment is frozen at build
+  time; changing the underlying secret (even via an integration that
+  auto-syncs the stored value) still requires a fresh deploy to actually
+  take effect.
+
+**You should be able to explain**
+1. Why does the app use the *pooled* Neon connection at runtime but the
+   *direct/unpooled* one for migrations and the seed script?
+2. Why did resetting the Neon password immediately break the live API,
+   and why did a plain redeploy — with no other change — fix it?
+3. Why was it Vercel's own "Sensitive Environment Variable" design, not a
+   bug or a chat-safety filter, that caused `vercel env pull` to return a
+   placeholder instead of the real connection string?

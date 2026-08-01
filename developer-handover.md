@@ -492,21 +492,30 @@ swallows stat-fetch errors (`.catch(() => {})`), that combination fails
    `d2f27de`) — nothing left to do here; this doc previously listed it as a
    pending pre-deploy step, which was stale.
 
-**Still to do, and deliberately not run by the assistant — see
-[[prod_demo_data_goal]] / the project's own convention:**
+5. **Seeded 2026-07-31** — `stats-test@example.com` now has 164 review rows
+   (131 reviewed, 33 skipped) live on prod. Verified via the API:
+   `currentStreak: 14` (matches the script's own predicted value exactly),
+   80 active days in `days`, 1 item due. Run by the user in their own
+   terminal (not the assistant), per [[prod_demo_data_goal]]/the project's
+   own convention — the seed script needs the real, un-redactable Neon
+   connection string, which should never pass through an AI-assisted
+   channel.
 
-5. **Seed the demo account** with rich data (see
-   `scripts/seed-test-data.js`'s own header for the exact commands). Run
-   this yourself, in your own terminal — it needs `vercel env pull` +
-   overriding `DATABASE_URL` with Neon's **direct (unpooled)** connection
-   string (the script reads `DATABASE_URL`, *not* `DATABASE_URL_UNPOOLED`),
-   and that string should never be pasted into chat (see the Neon
-   password-exposure gap in §12). `DEMO_PASSWORD` is local-only — never
-   add it to Vercel's environment variables, only the seed script reads it.
+   **Real gotcha hit doing this:** `vercel env pull` cannot retrieve
+   `DATABASE_URL_UNPOOLED`'s actual value — Neon's Vercel integration marks
+   DB credential variables as Vercel **"Sensitive Environment Variables"**,
+   which by design can never be read back through *any* channel (dashboard
+   or CLI) once saved, only used internally at runtime. `vercel env pull`
+   returns a fixed placeholder instead. The real value only lives in Neon's
+   own console ("Connect" modal → toggle pooling off → "Copy snippet"),
+   pasted by hand into a local `.env.production` (never through chat).
+   `DATABASE_URL` (pooled) may or may not be similarly restricted — wasn't
+   tested since the direct string is what the seed script needs anyway.
 6. **Reseed on demo day.** Everything the fixture builds is relative to the
    day it runs: the streak ends on seed day and the due items are dated to
    it. Measured decay: streak 14 on seed day, 14 the day after, **0** by
-   day three.
+   day three. (Also worth a fresh `DEMO_PASSWORD` if reseeding — the
+   2026-07-31 run used a placeholder-looking password by accident.)
 
 Known demo gotcha, no fix planned: the daily goal lives in `localStorage`,
 which is per-origin. A goal set on the production URL won't exist on a Vercel
