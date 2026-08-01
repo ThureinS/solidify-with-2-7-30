@@ -438,8 +438,16 @@ guaranteed current.
 
 ## 12. Known gaps / backlog (nothing here blocks the app working)
 
-- **Neon prod DB password was exposed in an AI chat session (2026-07-18),
-  never rotated.** Do this before treating the prod DB as fully secure.
+- ~~**Neon prod DB password was exposed in an AI chat session
+  (2026-07-18).**~~ **Rotated 2026-07-31.** Reset via Neon's console
+  (reached through Vercel's "Vercel-managed" Storage integration →
+  "Connect" → "Reset password" on the `neondb_owner` role). The old
+  password stopped working immediately; Vercel's env-var *value* may sync
+  automatically through the integration, but the already-running
+  deployment doesn't pick up a changed env var until redeployed — confirmed
+  this the hard way (`/auth/login` 500'd right after the reset, a manual
+  Vercel redeploy fixed it). Verified live: `demo@example.com` logs in
+  successfully post-redeploy.
 - **Refresh tokens** — would conflict with the graded spec's explicit
   "no refresh tokens" decision if not clearly scoped as bonus; Redis-backed
   revocation is the natural design if built.
