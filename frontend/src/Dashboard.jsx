@@ -235,7 +235,10 @@ export default function Dashboard({ token, user }) {
           {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}
         </h1>
         <span className="text-sm text-almanac-mute">
-          {dueItems.length} due today
+          {/* "left", not "due": anything already reviewed/skipped today has
+              dropped off this list, so this is the remainder -- History's
+              "x of y handled" counts the same day's full workload. */}
+          {dueItems.length} left today
           {completionRate !== null && ` · ${completionRate}% completion this year`}
           {!!streak && (
             <span title="Any day you reviewed or skipped something keeps the streak going.">

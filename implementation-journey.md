@@ -2094,3 +2094,106 @@ prod demo data. Both are done now.
 3. Why was it Vercel's own "Sensitive Environment Variable" design, not a
    bug or a chat-safety filter, that caused `vercel env pull` to return a
    placeholder instead of the real connection string?
+
+## 2026-08-01 — First real user walkthrough of the deployed app: 4 bugs found, 4 fixed
+
+**What was built**
+
+Nothing new. This session was a *review* session: you clicked through the
+live app yourself and came back with six observations. Four of them turned
+out to be real defects, which are now fixed; two are design decisions still
+open. This is the first time the app was examined by someone who wasn't the
+person who built it, and it found things no amount of self-review had.
+
+The four fixes:
+
+1. **The "today" moon on the History page was inverted.** With nothing
+   handled yet, it rendered as a *completely full gold disc* — visually
+   identical to the "you finished everything" state. Root cause was a single
+   array in `moonStyle()` (`frontend/src/ReviewHistoryPage.jsx`) that ran
+   backwards: `[size, 44, 32, 18, 0]`. Index 0 (nothing done) meant "fill
+   the whole 64px circle." Now `[0, 18, 32, 44]` with the full-disc case
+   handled separately, so the moon *waxes* as you work: new moon at 0,
+   full moon when everything due is handled.
+
+   The same defect was in the approved design reference,
+   `design/review-history-demo.html` — its base `.moon-today` rule carried
+   `inset 64px`, and `.p0` never overrode it. Fixed there too, otherwise the
+   next person porting from the reference reintroduces it.
+
+2. **The "Today" card changed its numbers when you browsed to a past year.**
+   It said "1 of 5 handled" on 2026 and "0 of 4 handled" on 2025. Root cause:
+   the page refetches `days` scoped to whichever year the arrows land on,
+   and the Today card was looking today's date up *inside that map*. Browse
+   to 2025 and `days.get('2026-08-01')` is simply absent, so it read 0.
+   Fixed by giving today its own piece of state, populated only from the
+   current-year load and never touched by the year arrows.
+
+3. **The legend said "All reviewed."** It can't. A full moon only means every
+   *logged action* that day was a review — items you never touched leave no
+   database row at all, so they can't be counted. Changed to "Reviewed, no
+   skips," which is exactly what the data supports.
+
+4. **"4 due today" on the Dashboard didn't match "1 of 5 handled" on
+   History.** Both numbers were correct; they were counting different things.
+   The Dashboard list shows what's *still outstanding* (reviewing an item
+   removes it from that list), while History shows the day's *whole*
+   workload. Relabelled to "4 left today" so the two pages stop looking like
+   they disagree.
+
+**Key decisions and why**
+
+- **Fix the design reference too, not just the React code.** The moon
+  inversion existed in `design/review-history-demo.html` first and was
+  faithfully ported. Fixing only the port leaves a booby-trapped reference
+  file that says the wrong thing is correct.
+- **Q5 ("do untouched items count as skipped?") is answered by copy, not by
+  new data.** They don't count as anything — no row is written. The honest
+  gap this leaves (review 1 of 4 due, still get a full moon) can't be closed
+  retroactively, because the app never recorded what was due on a past day.
+  So the legend was made accurate rather than the data being invented. This
+  is the same reasoning already recorded on 2026-07-25 for why the grid is
+  3-state and not a graded percentage.
+- **Verified in a real browser, not just by reading the diff.** Both visual
+  bugs were confirmed fixed against a locally seeded database: the crescent
+  now reads as a crescent at 1-of-5, and clicking back to 2025 leaves the
+  Today card unchanged.
+
+**Problems hit and how they were solved**
+
+- **"The daily goal shows 1/1 but I didn't review anything."** Not a UI bug,
+  and not a memory failure either — `scripts/seed-test-data.js` line ~114
+  seeds a clean 8-day streak *including today*, so the demo account starts
+  the day with one review already logged. Worth knowing before you demo
+  this to an instructor: the account is never truly at zero on day one.
+- **The screenshots were the evidence, not the source code.** The moon bug
+  in particular was invisible in the code until the CSS `inset` behaviour was
+  worked through: an inset box-shadow with a positive x-offset fills the
+  *left* portion of the element, so a 64px offset on a 64px circle covers all
+  of it. A screenshot showing a full gold disc above the words "0 of 4
+  handled" proved it in one glance.
+
+**New concepts introduced**
+
+- **Inset `box-shadow` as a fill technique**: `box-shadow: inset 18px 0 0 0
+  gold` paints the leftmost 18px inside an element. It's how one `<div>` can
+  render as a moon phase without an image or an SVG — and, as this session
+  showed, why getting the direction backwards is easy to miss when reading
+  the code alone.
+- **Derived state vs. fetched state**: "how many did I handle today" was
+  being *derived* from a fetched year of history. That's fine right up until
+  the fetched year stops containing today. When a value must stay stable
+  while something near it changes, give it its own state.
+- **Copy is part of correctness.** "All reviewed" and "Reviewed, no skips"
+  render the same pixel; only one of them is a true statement about the data.
+  A label that overclaims is a bug in the same way a wrong number is.
+
+**You should be able to explain**
+
+1. Why did the Today card show different numbers on the History page
+   depending on which year you were looking at — and why is giving it its
+   own state the fix, rather than fetching more years?
+2. Why can't the app tell you what percentage of a *past* day's due items you
+   actually did, when it can tell you that for today?
+3. The Dashboard says "4 left today" and History says "1 of 5 handled". Why
+   are both correct at the same time?

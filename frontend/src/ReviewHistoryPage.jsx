@@ -26,6 +26,10 @@ export default function ReviewHistoryPage({ token }) {
   const [year, setYear] = useState(currentYear);
   const [days, setDays] = useState(null); // Map<date, {reviewCount, skipCount, state}>
   const [dueCount, setDueCount] = useState(null);
+  // Kept OUT of the year-scoped `days` map on purpose: `days` is refetched for
+  // whichever year the arrows land on, so looking today up in it made the Today
+  // card read 0 handled as soon as you browsed to a past year.
+  const [handledToday, setHandledToday] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -36,6 +40,10 @@ export default function ReviewHistoryPage({ token }) {
         if (cancelled) return;
         setDays(new Map(history.days.map((d) => [d.date, d])));
         setDueCount(due.length);
+        if (year === currentYear) {
+          const entry = history.days.find((d) => d.date === today);
+          setHandledToday((entry?.reviewCount ?? 0) + (entry?.skipCount ?? 0));
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -43,14 +51,15 @@ export default function ReviewHistoryPage({ token }) {
     return () => {
       cancelled = true;
     };
-  }, [token, year]);
+    // `today`/`currentYear` are plain values derived from todayLocal(), constant
+    // for the life of the page -- listed only to satisfy exhaustive-deps.
+  }, [token, year, today, currentYear]);
 
-  const todayEntry = days?.get(today);
-  const handledToday = (todayEntry?.reviewCount ?? 0) + (todayEntry?.skipCount ?? 0);
   // dueCount is what's still outstanding right now; adding back what's
   // already been handled today recovers today's total workload, since
   // reviewing/skipping an item removes it from the due list.
-  const totalToday = dueCount === null ? null : dueCount + handledToday;
+  const totalToday =
+    dueCount === null || handledToday === null ? null : dueCount + handledToday;
   const ratio = !totalToday ? 0 : handledToday / totalToday;
   const phase = phaseForRatio(ratio);
 
@@ -126,7 +135,10 @@ export default function ReviewHistoryPage({ token }) {
 
         <div className="flex items-center gap-2.5 mt-6 flex-wrap text-xs text-almanac-mute">
           <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
-          <span>All reviewed</span>
+          {/* Not "all reviewed": a full moon only means every logged action that
+              day was a review. Items you never touched leave no row at all, so
+              they can't be counted here. */}
+          <span>Reviewed, no skips</span>
           <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border ml-3" style={mixedShadow} />
           <span>Mixed (some skipped)</span>
           <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute ml-3" />
@@ -189,13 +201,15 @@ const mixedShadow = { boxShadow: 'inset 7px 0 0 0 var(--color-almanac-accent)' }
 // Today's moon: a single larger instance, so a shape-encodes-fraction trick
 // (an inset box-shadow "filling" the circle from one side) is legible --
 // unlike the small per-day grid cells, this one only ever appears once.
+// The fill ASCENDS with progress: new moon at 0 handled, waxing to a full
+// gold disc when everything due is done. (The original reference file had
+// this inverted -- see design/review-history-demo.html -- so 0 handled and
+// 100% handled both rendered as an identical full moon.)
 function moonStyle(phase) {
-  const size = 64;
-  const fillByPhase = [size, 44, 32, 18, 0];
-  const inset = fillByPhase[phase];
   if (phase === 4) {
     return { background: 'var(--color-almanac-accent)', borderColor: 'var(--color-almanac-accent)' };
   }
+  const inset = [0, 18, 32, 44][phase];
   return {
     background: 'var(--color-almanac-moon-dark)',
     boxShadow: `inset ${inset}px 0 0 0 var(--color-almanac-accent)`,
