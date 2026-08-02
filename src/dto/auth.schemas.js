@@ -14,4 +14,13 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-module.exports = { registerSchema, loginSchema };
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z
+    .string()
+    .min(8, 'password must be at least 8 characters')
+    .regex(/[A-Za-z]/, 'password must contain at least one letter')
+    .regex(/[0-9]/, 'password must contain at least one number'),
+});
+
+module.exports = { registerSchema, loginSchema, changePasswordSchema };

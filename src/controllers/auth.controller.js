@@ -23,4 +23,13 @@ function me(req, res) {
   res.json(toAuthUser(req.user));
 }
 
-module.exports = { register, login, me };
+async function changePassword(req, res, next) {
+  try {
+    const token = await authService.changePassword({ userId: req.userId, ...req.body });
+    res.json({ token });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, me, changePassword };

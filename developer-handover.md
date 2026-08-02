@@ -532,9 +532,10 @@ guaranteed current.
   this the hard way (`/auth/login` 500'd right after the reset, a manual
   Vercel redeploy fixed it). Verified live: `demo@example.com` logs in
   successfully post-redeploy.
-- **Change password** and **refresh tokens** — **both decided on 2026-08-02
-  and scheduled for a dedicated session.** See §12b for the full scope,
-  the design decisions already taken, and the traps. Not started.
+- **Change password** — **built 2026-08-03, verified locally, not deployed.**
+  See §12b. **Refresh tokens** — still not started, remains a dedicated
+  bonus session. §12b has the full scope, the design decisions taken, and
+  the traps.
 - **Due-date email reminders** (a scheduler, distinct from the welcome email
   already built) — explicitly backlogged in the original spec, not started.
 - **Password recovery** — **deliberately declined in favour of change
@@ -626,7 +627,32 @@ which is per-origin. A goal set on the production URL won't exist on a Vercel
 preview URL or on a phone — set it live during the demo rather than
 pre-setting it.
 
-### 12b. Next session: change password + refresh tokens (decided 2026-08-02, not started)
+### 12b. Change password + refresh tokens (decided 2026-08-02)
+
+**Change password: built 2026-08-03.** `POST /auth/change-password`
+(`src/routes/auth.routes.js`), validated by `changePasswordSchema`
+(`src/dto/auth.schemas.js`), implemented in `authService.changePassword`
+(`src/services/auth.service.js`). Both open questions below were decided
+and built, not left open:
+
+- **Ends other sessions: yes**, via a new `User.tokenVersion` column
+  (migration `20260802180837_add_token_version`) embedded in the JWT payload
+  and checked in `requireAuth` (`src/middleware/auth.js`) alongside the
+  existing `isSuspended` check — no refresh-token machinery needed for this.
+  `changePassword` returns a fresh token in the same response so the request
+  that changed the password doesn't itself get logged out.
+- **UI location:** a new "Account" tab on the Dashboard, next to
+  Due today / All items / Admin (`AccountPanel.jsx`, wired into
+  `Dashboard.jsx`'s existing `view` state) — reused the same pattern as the
+  Admin tab rather than a new route.
+
+**Not yet done:** the migration hasn't been run against production Postgres
+(this project's Vercel build only runs `prisma generate`, not `migrate
+deploy` — see §12a step 2 for the last, schema-free push), and `main` hasn't
+been pushed. See `implementation-journey.md`'s 2026-08-03 entry for the full
+build log, including a stale-Prisma-client gotcha hit while testing locally.
+
+**Refresh tokens: still not started.** Scope below unchanged.
 
 Both were chosen deliberately over the rest of the backlog. Do them in this
 order — change password is small, real, and demoable in production today;

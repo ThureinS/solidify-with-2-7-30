@@ -2456,3 +2456,123 @@ Nothing — this was a scoping conversation, recorded here because the
    *rotation* make it worse rather than better?
 3. Why should this app store refresh tokens in Postgres rather than Redis,
    even though Redis is already in the codebase?
+
+## 2026-08-03 — Change password, built (part 1 of §12b)
+
+**What was built.** `POST /api/v1/auth/change-password`: a logged-in user
+sends their current password plus a new one, the same password rules from
+registration apply to the new one (min 8, one letter, one number), and the
+response is a fresh token. Lives in the frontend as a new "Account" tab
+next to Due today / All items / Admin on the Dashboard — the existing
+tab-switcher pattern, no new route.
+
+**The decision made first, before any code: does this end other sessions?**
+With plain JWTs, a token is validity-by-signature only — the server doesn't
+normally track which tokens exist, so there was nothing to revoke. Two
+options were on the table: leave it (old tokens keep working up to 7 days),
+or add just enough state to say yes. Went with **yes**, via one new column:
+`User.tokenVersion` (Int, default 0). It's carried inside the JWT payload at
+login, and `requireAuth` — which already re-fetches the user row on every
+request to check `isSuspended` (see 2026-07-something's suspend work) — now
+also compares `payload.tokenVersion` against the database value in that same
+lookup. Changing the password increments the column; every other token
+anyone is holding for this user fails that comparison on its very next
+request. This is *not* the refresh-token feature — no rotation, no token
+family, no new table. It's the smallest thing that answers "yes" using
+machinery that was already half there.
+
+**The bug this almost shipped with.** Bumping `tokenVersion` invalidates the
+token that was used to make *this very request* too — so a naive
+implementation would change the password successfully and then immediately
+log the user out, which reads like the feature is broken. Fixed by having
+`changePassword` sign and return a brand-new token in the same response, and
+having the frontend hand that token to the exact same `handleLoggedIn` path
+`AuthForm` uses after login (`localStorage.setItem` + `setToken` in
+`App.jsx`). Verified in the browser: after changing password, the app stays
+on the Account tab, no redirect to login, and a follow-up request (switching
+to the Due today tab) succeeds — proving the new token actually works, not
+just that the page didn't crash.
+
+**The second thing checked before trusting the column: old tokens issued
+before it existed.** Those carry no `tokenVersion` in their payload at all
+(`undefined`), and after the migration every existing user row has
+`tokenVersion: 0`. `requireAuth` treats a missing payload value as `0`
+(`payload.tokenVersion ?? 0`) rather than comparing `undefined !== 0`, so a
+token signed last week doesn't get silently logged out the moment this
+deploys. This was caught by running the change locally, not by reasoning
+about it — the first curl-based test of `/auth/me` failed with a bare
+`(payload.tokenVersion ?? 0) !== user.tokenVersion` bug for an unrelated
+reason (stale generated Prisma client after the migration — `npx prisma
+generate` hadn't rerun), which is its own lesson below.
+
+**Where it lives in the UI — the other decision made deliberately.** There's
+no settings screen and the top bar (`AlmanacShell`) has no spare room. Rather
+than force a new top-level route, change-password reuses the Dashboard's
+existing `view` state (`'due' | 'all' | 'admin' | 'account'`) the same way
+the Admin screen already does for admins — one more pill button, one more
+branch in the same ternary. Smallest diff that fits the existing shape of
+the app.
+
+**Problems hit and how they were solved**
+
+- **Prisma client goes stale on a schema change, silently.** Adding
+  `tokenVersion` to `schema.prisma` and running the migration updates the
+  *database*, but the already-running dev server's generated `@prisma/client`
+  still doesn't know the column exists — so `user.tokenVersion` came back
+  `undefined` at runtime, `undefined !== 0` was true, and *every* request
+  (not just old-token ones) got rejected as invalid. Fixed by running `npx
+  prisma generate` and restarting the server. `postinstall` only runs
+  `prisma generate` on `npm install`, not on every schema edit — worth
+  remembering for the refresh-token table next.
+- **A confirm-password field was added on the frontend only**, comparing
+  `newPassword !== confirmPassword` before the request is even sent. The
+  backend has no opinion on confirmation — it only ever sees `newPassword`.
+  This exists purely to catch a typo before it becomes the account's new,
+  unknown password; verified by deliberately mismatching the two fields in
+  the browser and confirming the request never left the page.
+- **Production migration is a manual step, same as the seed script.** This
+  project's Vercel build only runs `prisma generate`, not `prisma migrate
+  deploy` — the last production push was schema-free and didn't need this.
+  Deploying this feature means running the migration against production
+  Postgres *before* the new code goes live (a `findUnique` selecting a column
+  that doesn't exist yet would 500 every request). Not done yet — this
+  session stayed local; see "Not done yet" below.
+
+**New concepts introduced**
+
+- **Token versioning**: a cheap way to make normally-stateless JWTs
+  revocable without a token database. One integer on the user row, embedded
+  in the token at sign time, checked against the current value on every
+  request. It can only invalidate *all* of a user's tokens at once (bump the
+  number), not one specific token — that finer-grained control is what the
+  refresh-token feature's rotation/reuse-detection will add later.
+- **Why this doesn't overlap with refresh tokens as much as it looked like it
+  would.** The open question in the last session was "sequence change-password
+  so the answer is yes, and here's how" — the assumption was that answer
+  would arrive *via* refresh tokens. It didn't need to: `tokenVersion` answers
+  it independently, using a fact that was already true (`requireAuth` already
+  hits the database every request). Refresh tokens are still coming, for
+  their own reasons (short-lived access tokens, rotation, reuse detection) —
+  they just aren't the mechanism this particular yes/no depended on.
+
+**Not done yet**
+
+- **Not deployed.** Everything above is verified locally only (curl against
+  the dev server, and the Account tab exercised in the browser preview). The
+  migration has not been run against production Postgres, and `main` has not
+  been pushed — both need the user's go-ahead first, per this project's own
+  rule about production database changes.
+- **Refresh tokens (§12b part 2)** are still not started. They remain a
+  separate, explicitly-labelled bonus.
+
+**You should be able to explain**
+
+1. Why does `requireAuth` check `payload.tokenVersion ?? 0` instead of just
+   `payload.tokenVersion`, and what would break for existing logged-in users
+   if it didn't?
+2. `changePassword` bumps `tokenVersion` and then immediately signs a new
+   token in the same response — why would skipping that second step turn a
+   successful password change into a bug report?
+3. `tokenVersion` can log out *all* of a user's other sessions at once, but
+   not just one specific device. What would it take to revoke a single
+   session instead, and which upcoming feature is that?

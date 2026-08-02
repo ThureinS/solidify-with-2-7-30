@@ -43,7 +43,28 @@ async function loginUser({ email, password }) {
     throw new AppError(403, 'ACCOUNT_SUSPENDED', 'This account is suspended');
   }
 
-  return signToken({ userId: user.id, role: user.role });
+  return signToken({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });
 }
 
-module.exports = { registerUser, loginUser };
+// Bumps tokenVersion so every other token this user has out there (other
+// tabs, other devices) fails requireAuth's version check on its next request.
+// The token used to make *this* request would fail that same check, so we
+// sign and return a fresh one in the same response.
+async function changePassword({ userId, currentPassword, newPassword }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  const passwordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!passwordMatches) {
+    throw new AppError(401, 'INVALID_CREDENTIALS', 'Current password is incorrect');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, tokenVersion: { increment: 1 } },
+  });
+
+  return signToken({ userId: updated.id, role: updated.role, tokenVersion: updated.tokenVersion });
+}
+
+module.exports = { registerUser, loginUser, changePassword };

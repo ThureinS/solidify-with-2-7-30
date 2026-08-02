@@ -98,6 +98,16 @@ export function getMe(token) {
   return request('/auth/me', { token });
 }
 
+// Returns a fresh token: the backend bumps tokenVersion on change, which
+// invalidates the token used to make this very request too.
+export function changePassword(token, currentPassword, newPassword) {
+  return request('/auth/change-password', {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 // limit is omitted -- the backend defaults to 20, matching listItems.
 export function listUsers(token, { page = 1 } = {}) {
   return request(`/admin/users?page=${page}`, { token });

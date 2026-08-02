@@ -71,7 +71,10 @@ function App() {
   return (
     <AlmanacShell onToggleMode={toggleMode} loggedIn onLogout={handleLogout}>
       <Routes>
-        <Route path="/" element={<Dashboard token={token} user={user} />} />
+        <Route
+          path="/"
+          element={<Dashboard token={token} user={user} onTokenRefresh={handleLoggedIn} />}
+        />
         <Route path="/history" element={<ReviewHistoryPage token={token} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

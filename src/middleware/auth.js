@@ -23,6 +23,11 @@ async function requireAuth(req, res, next) {
     if (!user) {
       throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired token');
     }
+    // Tokens signed before this column existed carry no tokenVersion --
+    // treat that as version 0 so they aren't mass-logged-out on deploy.
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired token');
+    }
     if (user.isSuspended) {
       throw new AppError(403, 'ACCOUNT_SUSPENDED', 'This account is suspended');
     }

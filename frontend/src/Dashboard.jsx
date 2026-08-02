@@ -11,6 +11,7 @@ import {
 } from './api';
 import ItemDetail from './ItemDetail';
 import AdminPanel from './AdminPanel';
+import AccountPanel from './AccountPanel';
 import Pagination from './Pagination';
 import { computeWeeklyRecap } from './weeklyRecap';
 
@@ -25,8 +26,8 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
-export default function Dashboard({ token, user }) {
-  const [view, setView] = useState('due'); // 'due' | 'all' | 'admin'
+export default function Dashboard({ token, user, onTokenRefresh }) {
+  const [view, setView] = useState('due'); // 'due' | 'all' | 'admin' | 'account'
   const [dueItems, setDueItems] = useState([]);
   const [newText, setNewText] = useState('');
   const [error, setError] = useState('');
@@ -203,7 +204,7 @@ export default function Dashboard({ token, user }) {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-medium mb-1">
-          {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : 'Admin'}
+          {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : view === 'admin' ? 'Admin' : 'Account'}
         </h1>
         <span className="text-sm text-almanac-mute">
           {/* "left", not "due": anything already reviewed/skipped today has
@@ -276,9 +277,12 @@ export default function Dashboard({ token, user }) {
             Admin
           </button>
         )}
+        <button type="button" className={tabClass(view === 'account')} onClick={() => setView('account')}>
+          Account
+        </button>
       </div>
 
-      {view !== 'admin' && (
+      {view !== 'admin' && view !== 'account' && (
         <>
           <form onSubmit={handleAddItem} className="flex gap-2.5">
             <input
@@ -424,8 +428,10 @@ export default function Dashboard({ token, user }) {
             onNext={() => setPage(page + 1)}
           />
         </>
-      ) : (
+      ) : view === 'admin' ? (
         <AdminPanel token={token} currentUserId={user.id} />
+      ) : (
+        <AccountPanel token={token} onTokenRefresh={onTokenRefresh} />
       )}
     </div>
   );
