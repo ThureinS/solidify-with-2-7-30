@@ -2381,3 +2381,78 @@ the kind of gap an outside reader notices first.
 2. Why doesn't the streak need the same fix the weekly recap needed?
 3. Why does the user manual spend as much space on what the numbers *can't*
    tell you as on what they can?
+
+## 2026-08-02 (same day, later) — Deciding what's left: two features in, three out
+
+**What was built**
+
+Nothing — this was a scoping conversation, recorded here because the
+*reasons* for saying no are the part worth keeping.
+
+**Key decisions and why**
+
+- **Change password: yes, and first.** The user is already logged in, so it's
+  `bcrypt.compare` the current password, re-hash the new one, update the row.
+  Crucially it's the only candidate that **works in production as it stands**,
+  because it needs no email and no Redis.
+- **Refresh tokens: yes, second, as an explicitly-labelled bonus.** The graded
+  spec says *no refresh tokens*; that stays the submitted design, and the
+  bonus demonstrates the alternative rather than quietly contradicting the
+  spec.
+- **Password recovery: no.** It sounds adjacent to change-password but is a
+  different feature: the user is *locked out*, so it needs working email
+  delivery (which prod doesn't have), a single-use expiring token, a reset
+  page, rate limiting, and uniform responses that don't leak which addresses
+  have accounts. Several times the work, undemoable live.
+- **File upload and tags: no.** Near-zero learning value on this schema.
+- **A correction worth recording, because it was mine.** Earlier in the
+  session the backlog was described in a way that implied the mailer and
+  Redis were still to be built. They aren't — `src/lib/emailQueue.js`,
+  `worker.js` and `src/lib/redis.js` have existed for a while. What's true is
+  narrower and more useful: **they don't run in production.**
+  `.env.production` has no `REDIS_URL`, so both `redis` and `emailQueue`
+  evaluate to `null` *by design*; welcome emails are silently skipped, the
+  due-items cache fallback is inert, and `/health` reports
+  `redis: "not-configured"`. And `worker.js` is a long-running process, which
+  Vercel's serverless platform cannot host at all. The gap is hosting, not
+  code — but it's a hard constraint on anything built next.
+
+**Problems hit and how they were solved**
+
+- **The interesting question about refresh tokens turned out not to be the
+  backend.** The pieces (short access token, rotation, reuse detection,
+  revocation) are well-trodden. The trap is on the *client*: a 401 interceptor
+  that refreshes and retries must be **single-flight**. If five requests 401
+  at once and each starts its own refresh, rotation invalidates your own
+  session and logs the user out — a bug that only appears under concurrency,
+  which is exactly when it's hardest to see.
+- **Checked whether refresh tokens actually solve a problem here. Mostly not.**
+  Suspend already ends a session instantly, because the auth middleware
+  re-checks user status against the database on every request. So revocation
+  is already handled the simple way. That's a fine reason to build refresh
+  tokens *as a learning exercise* — it is not a reason to claim they fix
+  something, and the handover now says so in those words.
+
+**New concepts introduced**
+
+- **Refresh token rotation and reuse detection**: each refresh swaps the old
+  token for a new one, and a token presented *after* it was rotated means it
+  leaked — so the correct response is to invalidate the whole family of
+  tokens descended from that login, not just the one presented.
+- **Single-flight** (also called request coalescing): when N callers all need
+  the same expensive result, one call is made and the other N-1 wait on that
+  same promise. Standard fix for the refresh stampede.
+- **"Works locally" vs "works in production" is a design constraint, not a
+  deployment detail.** Redis exists in this codebase and is genuinely used —
+  and is still unavailable where the app actually runs. That's why refresh
+  tokens should be stored in Postgres here, even though Redis is the textbook
+  answer.
+
+**You should be able to explain**
+
+1. Why is change password a small feature and password recovery a large one,
+   when they both end with "the user has a new password"?
+2. What is the single-flight problem with refresh tokens, and why does token
+   *rotation* make it worse rather than better?
+3. Why should this app store refresh tokens in Postgres rather than Redis,
+   even though Redis is already in the codebase?

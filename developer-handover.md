@@ -532,15 +532,32 @@ guaranteed current.
   this the hard way (`/auth/login` 500'd right after the reset, a manual
   Vercel redeploy fixed it). Verified live: `demo@example.com` logs in
   successfully post-redeploy.
-- **Refresh tokens** — would conflict with the graded spec's explicit
-  "no refresh tokens" decision if not clearly scoped as bonus; Redis-backed
-  revocation is the natural design if built.
+- **Change password** and **refresh tokens** — **both decided on 2026-08-02
+  and scheduled for a dedicated session.** See §12b for the full scope,
+  the design decisions already taken, and the traps. Not started.
 - **Due-date email reminders** (a scheduler, distinct from the welcome email
   already built) — explicitly backlogged in the original spec, not started.
-- **Password recovery, file upload, tags, statistics** — explicitly
-  backlogged in the original spec, not started.
-- **Worker + Redis don't run in production** — see §6; purely a hosting-cost
-  gap, not a code gap.
+- **Password recovery** — **deliberately declined in favour of change
+  password** (2026-08-02). It's for a user who is *locked out*, so it needs
+  working email delivery, a single-use expiring token, a reset page, rate
+  limiting, and uniform responses that don't reveal which addresses have
+  accounts. Several times the work of change-password, and undemoable in
+  prod, where outbound email doesn't run.
+- **File upload and tags** — explicitly backlogged in the original spec and
+  **declined 2026-08-02**: near-zero learning value on this schema.
+- **Statistics** — no longer a gap. Four bonus stats shipped 2026-07-30
+  (`b7479c5`), and the whole stat row was audited and corrected 2026-08-01
+  (§10c).
+- **Worker + Redis don't run in production** — see §6; purely a hosting gap,
+  not a code gap, but it constrains what a new feature can rely on. To be
+  precise about what "doesn't run" means: `.env.production` has no
+  `REDIS_URL`, so `src/lib/redis.js` and `src/lib/emailQueue.js` both
+  evaluate to `null` by design. In prod, welcome emails are silently skipped,
+  the due-items cache-on-failure fallback is inert, and `/health` reports
+  `redis: "not-configured"`. Separately, `worker.js` is a long-running
+  process, which Vercel's serverless platform cannot host at all — running it
+  needs a different host (Railway/Render/Fly) plus a managed Redis (Upstash).
+  **Anything new that must work in production has to work without Redis.**
 
 ### 12a. Deployment — pushed and verified live 2026-07-31
 
@@ -608,3 +625,64 @@ Known demo gotcha, no fix planned: the daily goal lives in `localStorage`,
 which is per-origin. A goal set on the production URL won't exist on a Vercel
 preview URL or on a phone — set it live during the demo rather than
 pre-setting it.
+
+### 12b. Next session: change password + refresh tokens (decided 2026-08-02, not started)
+
+Both were chosen deliberately over the rest of the backlog. Do them in this
+order — change password is small, real, and demoable in production today;
+refresh tokens are the bigger learning exercise and the one with traps.
+
+**Constraint that shapes both:** production has no Redis (see §12). Anything
+that must work on the live deployment has to work with Postgres alone.
+
+#### Change password (do first)
+
+Small and self-contained: the user is already logged in and supplies their
+current password plus a new one. `bcrypt.compare` the current, re-hash the
+new, update the row. The existing password rules (`src/dto/auth.schemas.js`:
+min 8, at least one letter, at least one number) apply unchanged.
+
+Open questions worth deciding rather than assuming:
+- Does changing a password end other sessions? With plain JWTs today it
+  *can't*, unless the token check starts consulting something per request.
+  This overlaps with refresh tokens — worth sequencing so the answer is
+  "yes, and here's how" rather than a silent no.
+- Where does it live in the UI? There is no settings screen; the top bar has
+  no room. This is a real design decision, not an implementation detail.
+
+#### Refresh tokens (do second, as an explicitly-labelled bonus)
+
+**The spec conflict is deliberate and must stay visible.** The graded
+`submission-requirements.md` says 7-day token, *no refresh tokens*. That
+decision stands as the submitted design. Refresh tokens are a bonus branch
+demonstrating the alternative, and the docs should say so plainly rather than
+quietly contradicting the spec.
+
+The pieces:
+1. Split the current 7-day token into a short access token (~15 min) plus a
+   long-lived refresh token.
+2. **Storage — the real decision.** Redis is the natural fit and is already
+   wired locally, but it is `null` in production. **A Postgres table is the
+   pragmatic pick** if this is meant to work on the live deployment.
+3. `POST /auth/refresh`, with **rotation**: the presented refresh token is
+   invalidated as part of issuing the new pair.
+4. **Reuse detection**: a token that was already rotated turning up again
+   means it leaked — invalidate the whole family, not just that token.
+5. Revocation paths: logout, and suspend.
+
+**The trap that matters most is on the frontend.** A 401 interceptor that
+refreshes and retries needs **single-flight**: if several requests 401 at the
+same time and each fires its own refresh, rotation invalidates your own
+session and logs the user out. One in-flight refresh promise, shared by every
+waiting request. This detail is most of the actual difficulty.
+
+**Second trap:** a refresh token you cannot revoke is just a longer-lived
+access token — strictly *worse* than what exists today. Half-built is worse
+than not built here.
+
+**Worth knowing before starting:** suspend already invalidates sessions
+instantly, because the auth path checks user status per request. So
+revocation is, in practice, already solved the simple way. Refresh tokens
+partly re-solve a problem this app does not currently have. That is a fine
+reason to build them as a learning exercise — it is not a good reason to
+describe them as fixing something.
