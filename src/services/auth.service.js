@@ -154,13 +154,23 @@ async function changePassword({ userId, currentPassword, newPassword }) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Current password is incorrect');
   }
 
+  // Atomic: unlike suspend (where requireAuth/refresh both also re-check
+  // isSuspended directly), tokenVersion is the *only* thing access tokens
+  // check, and refresh tokens don't check tokenVersion at all -- the revoke
+  // below is the only thing stopping a stolen refresh token from surviving
+  // a password change. A process crash between two separate statements here
+  // would leave that revoke undone with the password already changed.
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash, tokenVersion: { increment: 1 } },
-  });
-
-  await revokeAllRefreshTokensForUser(userId);
+  const [updated] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
 
   return issueTokenPair({
     userId: updated.id,
