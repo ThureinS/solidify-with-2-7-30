@@ -22,8 +22,8 @@ export default function AuthForm({ onLoggedIn }) {
       if (mode === 'register') {
         await register(email, password);
       }
-      const { token } = await login(email, password);
-      onLoggedIn(token);
+      const { accessToken, refreshToken } = await login(email, password);
+      onLoggedIn(accessToken, refreshToken);
     } catch (err) {
       setError(err.message);
     } finally {

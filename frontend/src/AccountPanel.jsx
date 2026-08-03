@@ -23,11 +23,11 @@ export default function AccountPanel({ token, onTokenRefresh }) {
 
     setBusy(true);
     try {
-      const { token: freshToken } = await changePassword(token, currentPassword, newPassword);
-      // The old token is now invalid (tokenVersion bumped server-side) --
-      // hand the new one to App.jsx the same way login does, or the very
-      // next request logs this tab out.
-      onTokenRefresh(freshToken);
+      const { accessToken, refreshToken } = await changePassword(token, currentPassword, newPassword);
+      // The old tokens are now invalid (tokenVersion bumped, refresh tokens
+      // revoked server-side) -- hand the new pair to App.jsx the same way
+      // login does, or the very next request logs this tab out.
+      onTokenRefresh(accessToken, refreshToken);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');

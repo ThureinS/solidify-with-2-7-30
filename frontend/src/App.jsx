@@ -4,7 +4,14 @@ import AuthForm from './AuthForm';
 import Dashboard from './Dashboard';
 import ReviewHistoryPage from './ReviewHistoryPage';
 import AlmanacShell from './AlmanacShell';
-import { getMe } from './api';
+import {
+  getMe,
+  logout,
+  getRefreshToken,
+  storeRefreshToken,
+  clearRefreshToken,
+  setAuthHandlers,
+} from './api';
 
 const TOKEN_KEY = 'token';
 
@@ -25,16 +32,29 @@ function App() {
     setMode((m) => (m === 'light' ? 'dark' : 'light'));
   }
 
-  function handleLoggedIn(newToken) {
-    localStorage.setItem(TOKEN_KEY, newToken);
-    setToken(newToken);
+  // Also used by login and change-password, both of which hand back a fresh
+  // { accessToken, refreshToken } pair the same way a token refresh does.
+  function handleLoggedIn(accessToken, refreshToken) {
+    localStorage.setItem(TOKEN_KEY, accessToken);
+    if (refreshToken) storeRefreshToken(refreshToken);
+    setToken(accessToken);
   }
 
   function handleLogout() {
+    const refreshToken = getRefreshToken();
+    // Best-effort: revokes server-side, but the session ends client-side
+    // either way -- a network blip here shouldn't trap the user logged in.
+    if (refreshToken) logout(refreshToken).catch(() => {});
     localStorage.removeItem(TOKEN_KEY);
+    clearRefreshToken();
     setToken(null);
     setUser(null);
   }
+
+  // Re-registered every render (cheap: two variable assignments) rather than
+  // once in a useEffect, so api.js's single-flight refresh always calls the
+  // current closures instead of ones captured stale from an earlier render.
+  setAuthHandlers({ onTokensRefreshed: handleLoggedIn, onAuthExpired: handleLogout });
 
   // Learn who we are whenever the token changes (mount + after login).
   useEffect(() => {
