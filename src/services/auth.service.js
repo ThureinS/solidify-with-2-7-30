@@ -6,7 +6,7 @@ const { signToken } = require('../lib/jwt');
 const emailQueue = require('../lib/emailQueue');
 
 const SALT_ROUNDS = 10;
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days -- see developer-handover.md §12b
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days -- see developer-handover.md §12b
 
 // Feature flag: a kill switch for the welcome email, toggleable without a
 // redeploy (e.g. if Gmail starts rate-limiting/blocking the SMTP account).
