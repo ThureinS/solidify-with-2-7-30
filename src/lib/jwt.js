@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 
-const EXPIRES_IN = '7d';
+// Bumped to 15m as part of the refresh-token bonus (developer-handover.md
+// §12b) -- the graded spec's 7-day single token lived here before. Long
+// sessions now come from the refresh token, not this one.
+const EXPIRES_IN = '15m';
 
 // Read the secret at call time (not as a top-level const) so this module
 // stays importable even if .env hasn't loaded yet, and so a missing secret

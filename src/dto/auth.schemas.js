@@ -23,4 +23,10 @@ const changePasswordSchema = z.object({
     .regex(/[0-9]/, 'password must contain at least one number'),
 });
 
-module.exports = { registerSchema, loginSchema, changePasswordSchema };
+// Shared by /auth/refresh and /auth/logout -- both just take the refresh
+// token itself, no other fields.
+const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
+module.exports = { registerSchema, loginSchema, changePasswordSchema, refreshTokenSchema };

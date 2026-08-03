@@ -26,8 +26,30 @@ model User {
   createdAt    DateTime @default(now())
 
   items Item[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+// Bonus feature, not in the graded spec (see submission-requirements.md and
+// developer-handover.md §12b) -- backs POST /auth/refresh. One row per
+// refresh token ever issued; rotation marks the old row revoked instead of
+// deleting it, so a reused (already-rotated) token can still be recognised
+// as stolen and used to kill its whole family.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  familyId  String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
 }
 
 model Item {
