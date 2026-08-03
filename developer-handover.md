@@ -660,8 +660,10 @@ live backend afterward: `/health` → ok, `/auth/login` (`demo@example.com`)
 §12b features are now live together, as planned.
 
 **Refresh tokens: built and deployed 2026-08-03.** All five pieces are done:
-the access token is 15m (`src/lib/jwt.js`), the refresh token lives in a
-Postgres `RefreshToken` table (migration `20260803055407_add_refresh_tokens`),
+the access token is 30m / refresh token is 30d (`src/lib/jwt.js`,
+`src/services/auth.service.js` -- started at 15m/7d, bumped once rotation
+was confirmed working live), the refresh token lives in a Postgres
+`RefreshToken` table (migration `20260803055407_add_refresh_tokens`),
 `POST /auth/refresh` rotates on use, reuse of an already-rotated token kills
 the whole family, and logout/suspend/change-password all revoke. The
 frontend's single-flight 401 interceptor (`frontend/src/api.js`) is built

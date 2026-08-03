@@ -2713,9 +2713,10 @@ from ordinary React behavior, not a contrived test.
   from the last session has been pushed — both should probably go up
   together, since production has been on the old single-token contract this
   whole time.
-- **Lifetimes may change.** Started at 15 minutes access / 7 days refresh;
-  the plan is to try 30 minutes / 30 days once this is confirmed working,
-  rather than tune it up front.
+- ~~**Lifetimes may change.**~~ Done, same day: 15m/7d was confirmed working
+  live in prod first (see the deploy entry below), then bumped to 30m/30d
+  — verified with a real token locally (decoded the JWT's own `exp`/`iat`
+  and checked the difference is 1800 seconds) before committing.
 
 **You should be able to explain**
 
