@@ -2719,6 +2719,53 @@ from ordinary React behavior, not a contrived test.
 
 **You should be able to explain**
 
+## 2026-08-03 (same day, later still) — Review fix, deploy, and a second Neon exposure
+
+**One correctness fix from a second review, before deploying.** A pass over
+the whole session flagged that `changePassword`'s `tokenVersion` bump and
+its refresh-token revoke were two separate `await` statements, not one
+atomic unit. That distinction matters more here than it would for suspend:
+`refresh()` never checks `tokenVersion` at all (only `revokedAt`,
+`expiresAt`, and `isSuspended`), so the revoke call is the *only* thing
+stopping a stolen refresh token from surviving a password change — a crash
+between the two statements would leave the password changed and the old
+refresh token still live. Suspend doesn't have the same exposure, because
+`refresh()`'s `isSuspended` check is a second, independent gate on top of
+whatever `revokeAllRefreshTokensForUser` does — checked and confirmed with a
+real curl test (suspend a user, then try to refresh their token: rejected,
+even before touching the revoke logic). Fixed by wrapping the password
+update and the revoke in one `prisma.$transaction([...])`.
+
+**Deployed and verified live.** Pushed `main` (`5b7f809` → `50ea1af`, 4
+commits), both Vercel projects auto-redeployed. The user ran
+`prisma migrate deploy` against production Postgres by hand, in their own
+terminal, with the real Neon connection string — it picked up *three*
+pending migrations, not the two expected: `add_review_index` from
+2026-07-25 had apparently never been applied either, alongside
+`add_token_version` and `add_refresh_tokens`. Verified afterward against
+the live API directly (not by asking the user to check): `/health` → ok,
+`/auth/login` → a working `{ accessToken, refreshToken }` pair, `/auth/me`
+with the fresh access token → 200, `/auth/refresh` → rotates correctly live,
+then `/auth/logout` cleaned up the test session.
+
+**A second Neon password exposure, this one caused by the assistant.**
+While answering "which connection string do I need," the assistant ran
+`grep DATABASE_URL .env.production` to check which project held the DB
+credential — printing the real, current production password into the chat
+transcript. Same category of incident as 2026-07-18 (a live database
+credential visible to anyone with that transcript), just caused by the
+assistant's own tool call this time rather than the user pasting it.
+Flagged immediately, rotation offered, declined again — same call as last
+time. Logged in `neon_password_exposure.md`.
+
+**You should be able to explain**
+
+1. Why did `changePassword` need its two database writes wrapped in one
+   transaction, when `setSuspended`'s two writes didn't need the same fix?
+2. The migration run picked up a third, older migration that should have
+   already been live. What does that imply about every deploy between
+   2026-07-25 and today?
+
 1. Why does presenting an already-rotated refresh token kill its *whole
    family*, instead of just that one token?
 2. `developer-handover.md`'s §12b listed "logout, and suspend" as the

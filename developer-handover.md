@@ -532,10 +532,9 @@ guaranteed current.
   this the hard way (`/auth/login` 500'd right after the reset, a manual
   Vercel redeploy fixed it). Verified live: `demo@example.com` logs in
   successfully post-redeploy.
-- **Change password** and **refresh tokens** — **both built 2026-08-03,
-  verified locally, neither deployed.** See §12b for the full scope, the
-  design decisions taken, and the traps -- both migrations need to go to
-  production together before either is live.
+- ~~**Change password** and **refresh tokens** — both built and
+  deployed 2026-08-03.~~ See §12b for the full scope, the design decisions
+  taken, and the traps. No longer a gap.
 - **Due-date email reminders** (a scheduler, distinct from the welcome email
   already built) — explicitly backlogged in the original spec, not started.
 - **Password recovery** — **deliberately declined in favour of change
@@ -646,23 +645,30 @@ and built, not left open:
   `Dashboard.jsx`'s existing `view` state) — reused the same pattern as the
   Admin tab rather than a new route.
 
-**Not yet done:** the migration hasn't been run against production Postgres
-(this project's Vercel build only runs `prisma generate`, not `migrate
-deploy` — see §12a step 2 for the last, schema-free push), and `main` hasn't
-been pushed. See `implementation-journey.md`'s 2026-08-03 entry for the full
-build log, including a stale-Prisma-client gotcha hit while testing locally.
+**Deployed and verified live, 2026-08-03.** `main` pushed (`5b7f809` →
+`50ea1af`), both Vercel projects auto-redeployed, and the migration ran
+against production Postgres by hand (`prisma migrate deploy` with the real
+Neon unpooled connection string, run by the user in their own terminal —
+never through chat). It picked up three pending migrations, not two:
+`20260725110336_add_review_index` had apparently never been applied either,
+alongside `add_token_version` and `add_refresh_tokens`. Verified against the
+live backend afterward: `/health` → ok, `/auth/login` (`demo@example.com`)
+→ `{ accessToken, refreshToken }`, `/auth/me` with the fresh access token →
+200, `/auth/refresh` with the fresh refresh token → rotates correctly, then
+`/auth/logout` cleaned up the test session. Change password's migration
+(`add_token_version`) rode along in the same `migrate deploy` run, so both
+§12b features are now live together, as planned.
 
-**Refresh tokens: built 2026-08-03, verified locally, not deployed.** All
-five pieces below are done: the access token is 15m (`src/lib/jwt.js`), the
-refresh token lives in a new Postgres `RefreshToken` table (migration
-`20260803055407_add_refresh_tokens`), `POST /auth/refresh` rotates on use,
-reuse of an already-rotated token kills the whole family, and logout/
-suspend/change-password all revoke. The frontend's single-flight 401
-interceptor (`frontend/src/api.js`) is built and was verified against a
-*real* concurrent-401 case (React StrictMode's double-mounted `/auth/me`
-effect), not just a contrived one. Full build log, including the
-change-password revocation gap this surfaced (see below) and a
-`vi.mock`-doesn't-reach-nested-`require()` testing gotcha, is in
+**Refresh tokens: built and deployed 2026-08-03.** All five pieces are done:
+the access token is 15m (`src/lib/jwt.js`), the refresh token lives in a
+Postgres `RefreshToken` table (migration `20260803055407_add_refresh_tokens`),
+`POST /auth/refresh` rotates on use, reuse of an already-rotated token kills
+the whole family, and logout/suspend/change-password all revoke. The
+frontend's single-flight 401 interceptor (`frontend/src/api.js`) is built
+and was verified against a *real* concurrent-401 case (React StrictMode's
+double-mounted `/auth/me` effect), not just a contrived one. Full build log,
+including the change-password revocation gap this surfaced (see below) and
+a `vi.mock`-doesn't-reach-nested-`require()` testing gotcha, is in
 `implementation-journey.md`'s 2026-08-03 (later) entry.
 
 **One gap this surfaced in the plan above: change-password needed adding
