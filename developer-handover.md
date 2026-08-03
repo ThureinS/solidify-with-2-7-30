@@ -532,10 +532,10 @@ guaranteed current.
   this the hard way (`/auth/login` 500'd right after the reset, a manual
   Vercel redeploy fixed it). Verified live: `demo@example.com` logs in
   successfully post-redeploy.
-- **Change password** — **built 2026-08-03, verified locally, not deployed.**
-  See §12b. **Refresh tokens** — still not started, remains a dedicated
-  bonus session. §12b has the full scope, the design decisions taken, and
-  the traps.
+- **Change password** and **refresh tokens** — **both built 2026-08-03,
+  verified locally, neither deployed.** See §12b for the full scope, the
+  design decisions taken, and the traps -- both migrations need to go to
+  production together before either is live.
 - **Due-date email reminders** (a scheduler, distinct from the welcome email
   already built) — explicitly backlogged in the original spec, not started.
 - **Password recovery** — **deliberately declined in favour of change
@@ -652,7 +652,31 @@ deploy` — see §12a step 2 for the last, schema-free push), and `main` hasn't
 been pushed. See `implementation-journey.md`'s 2026-08-03 entry for the full
 build log, including a stale-Prisma-client gotcha hit while testing locally.
 
-**Refresh tokens: still not started.** Scope below unchanged.
+**Refresh tokens: built 2026-08-03, verified locally, not deployed.** All
+five pieces below are done: the access token is 15m (`src/lib/jwt.js`), the
+refresh token lives in a new Postgres `RefreshToken` table (migration
+`20260803055407_add_refresh_tokens`), `POST /auth/refresh` rotates on use,
+reuse of an already-rotated token kills the whole family, and logout/
+suspend/change-password all revoke. The frontend's single-flight 401
+interceptor (`frontend/src/api.js`) is built and was verified against a
+*real* concurrent-401 case (React StrictMode's double-mounted `/auth/me`
+effect), not just a contrived one. Full build log, including the
+change-password revocation gap this surfaced (see below) and a
+`vi.mock`-doesn't-reach-nested-`require()` testing gotcha, is in
+`implementation-journey.md`'s 2026-08-03 (later) entry.
+
+**One gap this surfaced in the plan above: change-password needed adding
+as a fourth revocation path.** The scope list originally said "logout, and
+suspend" — it didn't say change-password, because when it was written
+change-password didn't exist yet and had nothing to revoke. Once refresh
+tokens exist, that becomes a real hole: `refresh()` mints a new access
+token from whatever `tokenVersion` currently *is*, not from the old token's
+payload, so a stolen-but-unused refresh token would survive a password
+change and keep minting valid, current access tokens. Fixed by having
+`changePassword` also call `revokeAllRefreshTokensForUser`. Not a
+retrofit of tokenVersion-checking into refresh-token logic (the "don't
+connect them" note above still holds for that) — just closing a hole the
+feature's own existence opened.
 
 Both were chosen deliberately over the rest of the backlog. Do them in this
 order — change password is small, real, and demoable in production today;

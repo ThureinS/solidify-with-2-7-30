@@ -2576,3 +2576,155 @@ the app.
 3. `tokenVersion` can log out *all* of a user's other sessions at once, but
    not just one specific device. What would it take to revoke a single
    session instead, and which upcoming feature is that?
+
+## 2026-08-03 (same day, later) — Refresh tokens, built (part 2 of §12b, bonus)
+
+**What this is and isn't.** This is an explicitly-labelled bonus branch, not
+the graded design — `submission-requirements.md` says "7-day token, no
+refresh tokens," and that stays the submitted decision. This session builds
+the alternative on top of it anyway, as a learning exercise, and the docs
+(this entry, `developer-handover.md` §12b) say so rather than quietly
+changing what's graded.
+
+**What was built.** The single 15-minute-shorter access token
+(`src/lib/jwt.js`'s `EXPIRES_IN`, was 7d, now 15m) is now paired with a
+7-day refresh token stored in Postgres — a new `RefreshToken` table
+(migration `20260803055407_add_refresh_tokens`), not Redis, because
+production has none (`developer-handover.md` §6/§12). `POST /auth/login`
+now returns `{ accessToken, refreshToken }` instead of `{ token }`. New
+routes: `POST /auth/refresh` (rotates: the presented token is revoked as
+part of issuing the next pair) and `POST /auth/logout` (revokes it early,
+on purpose). `changePassword` and admin suspend both got a matching
+`revokeAllRefreshTokensForUser` call.
+
+**Rotation + reuse detection, the core mechanic.** Every refresh token is
+one row (`familyId`, a SHA-256 `tokenHash`, `expiresAt`, `revokedAt`). Using
+a token doesn't delete the row — it sets `revokedAt` and creates a new row
+with the *same* `familyId`. That's what makes reuse detectable: a legitimate
+client only ever has the newest token in a family, so the **only** way an
+already-`revokedAt` token gets presented again is if someone else has a
+copy — a leak. When that happens, `refresh()` doesn't just reject the one
+token, it revokes every unrevoked row sharing that `familyId`, killing the
+whole chain back to the original login. Verified live with curl: log in,
+refresh once (get token B), present the original token A again — rejected,
+*and* token B (which had done nothing wrong) is now also dead, because it's
+in the same family. That's the intended blast radius, not a bug: token A
+being reused means the family is compromised, not that token A specifically
+is compromised.
+
+**The gap the handover's own scope list had.** §12b's revocation-paths list
+said "logout, and suspend" — it didn't mention change-password. Worked
+through why that's a real hole, not a nitpick: `refresh()` mints a new
+access token from the **current** `user.tokenVersion` read fresh from the
+database, not from anything in the old token's payload. So if an attacker
+had a stolen-but-unused refresh token, and the real user changed their
+password specifically because they suspected exactly that, the attacker's
+next `/auth/refresh` call would still succeed and hand back a brand-new,
+fully-valid access token — tokenVersion and all. `changePassword` bumping
+`tokenVersion` protects *access* tokens the attacker already had; it does
+nothing about a *refresh* token the attacker has, because refresh tokens
+aren't JWTs and were never checked against tokenVersion at all. Fixed with
+one `revokeAllRefreshTokensForUser` call added to `changePassword`, right
+alongside the tokenVersion bump. The handover wasn't wrong when it was
+written — refresh tokens didn't exist yet — but building them created a gap
+its own older text didn't anticipate, which is exactly the kind of thing
+this project's rules say to raise rather than silently work around.
+
+**The frontend trap, and how it was actually proven, not just built.** A 401
+means the access token needs refreshing — `api.js`'s `request()` now catches
+that, calls a `refreshAccessToken()` helper, and retries the original call
+once with the new token. The trap: if two requests 401 around the same
+time and each starts its own `/auth/refresh` call, the *first* response
+rotates the token and the *second* call presents the now-already-rotated
+one — reuse detection (the feature working exactly as designed) kills the
+whole session. Fixed with a single module-level `refreshPromise` in
+`api.js`: the first 401 starts the real fetch and stores the promise;
+anything else that 401s while it's in flight gets handed that same promise
+instead of starting a second one. This wasn't just reasoned through and
+trusted — it was caught happening for real in the browser. React's
+StrictMode double-invokes effects in development, so the app's own
+`getMe()` bootstrap call on mount fired twice; with a deliberately corrupted
+access token in `localStorage`, the network log showed **two** concurrent
+`GET /auth/me` calls both getting a 401, but only **one**
+`POST /auth/refresh` — and the app stayed logged in. Without the shared
+promise, that exact sequence is the bug the handover warned about, happening
+from ordinary React behavior, not a contrived test.
+
+**Problems hit and how they were solved**
+
+- **`vi.mock()` doesn't reach a nested CJS `require()`.** The first attempt
+  at a rotation/reuse test mocked `../src/lib/prisma.js` the normal Vitest
+  way, expecting `auth.service.js`'s `require('../lib/prisma')` to pick up
+  the mock. It didn't — the test kept hitting a *real* (misconfigured, no
+  `DATABASE_URL` in the test env) Postgres connection and failing with a
+  SASL auth error. Traced it with a minimal two-file repro: mocking works
+  fine when the *test file itself* imports the mocked module, but breaks
+  the moment an intermediate plain CommonJS file is the one doing the
+  `require()` — this project's `"type": "commonjs"` setup doesn't route that
+  nested `require()` through Vitest's mocked module graph. Fixed by not
+  mocking the module at all: importing the *real* singleton client and using
+  `vi.spyOn()` on its methods (`prisma.refreshToken.findUnique`, etc.)
+  instead. That works regardless of the require/import mismatch, because
+  it's just mutating properties on the one shared object instance every
+  file's `require()` call already resolves to — no module interception
+  needed.
+- **The same test file's mocks bled into each other.** `vi.spyOn()` in a
+  `beforeEach` without first restoring the previous test's spies keeps
+  their old resolved values and — more subtly — their accumulated
+  `mock.calls` history, so a `toHaveBeenCalled()` assertion in test 3 could
+  see a call made back in test 1. Fixed with `vi.restoreAllMocks()` at the
+  top of `beforeEach`, before re-spying.
+- **Prisma client stale after the schema change, again.** Same lesson as
+  last session's `tokenVersion` column: `npx prisma migrate dev` updates the
+  database, but the running dev server's generated client doesn't know
+  about the new `RefreshToken` model until `npx prisma generate` runs and
+  the server restarts. Did both this time before testing, rather than
+  finding out the hard way.
+
+**New concepts introduced**
+
+- **Refresh token rotation**: instead of one refresh token living
+  unchanged for its whole lifetime, every use retires it and issues a
+  replacement. This turns "is this token still valid?" into a question with
+  a much smaller, more useful answer space: valid (the newest in its
+  family), or *reused* (a specific, detectable red flag), rather than just
+  valid/invalid.
+- **Token families**: the reason rotation can *detect theft* and not just
+  churn tokens for no reason. Every token descended from one login shares an
+  id; punishing reuse means killing the whole family, not just the one
+  token that got reused — because if one member of the family was copied,
+  there's no way to know from the token alone whether the copy or the
+  original showed up first.
+- **Single-flight** (the frontend concept, not specific to auth): when
+  multiple concurrent callers would otherwise each trigger the same
+  expensive/stateful operation, share one in-flight promise instead of
+  starting a second one. The general shape shows up anywhere an operation
+  has a side effect that isn't safe to run twice concurrently — rotation is
+  one example of "not safe to run twice," not the only kind.
+
+**Not done yet**
+
+- **Not deployed.** Verified locally only: curl for every backend path
+  (login, refresh, rotation, reuse detection, expiry, suspend, logout,
+  logout-is-idempotent), the browser for the frontend (login, a corrupted
+  token silently recovering via a real concurrent-401 case, logout, and
+  change-password's new token pair). The migration hasn't run against
+  production Postgres, and neither this nor the change-password migration
+  from the last session has been pushed — both should probably go up
+  together, since production has been on the old single-token contract this
+  whole time.
+- **Lifetimes may change.** Started at 15 minutes access / 7 days refresh;
+  the plan is to try 30 minutes / 30 days once this is confirmed working,
+  rather than tune it up front.
+
+**You should be able to explain**
+
+1. Why does presenting an already-rotated refresh token kill its *whole
+   family*, instead of just that one token?
+2. `developer-handover.md`'s §12b listed "logout, and suspend" as the
+   revocation paths to build. Why does change-password need one too, once
+   refresh tokens exist, even though it didn't need anything from them
+   before?
+3. Two requests 401 at almost the same instant, and both start their own
+   `/auth/refresh` call. Walk through exactly what goes wrong, step by step,
+   ending in the user getting logged out.
