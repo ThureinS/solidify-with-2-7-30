@@ -45,7 +45,7 @@ export default function AlmanacShell({ onToggleMode, loggedIn, onLogout, childre
           )}
         </div>
       </header>
-      <div className="max-w-3xl mx-auto px-6 py-8">{children}</div>
+      <div className="max-w-5xl mx-auto px-6 py-8">{children}</div>
     </div>
   );
 }
