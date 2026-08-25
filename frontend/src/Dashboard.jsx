@@ -16,6 +16,18 @@ import Pagination from './Pagination';
 import { computeWeeklyRecap } from './weeklyRecap';
 
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
+const GRADES = ['AGAIN', 'HARD', 'GOOD', 'EASY'];
+const GRADE_LABELS = { AGAIN: 'Again', HARD: 'Hard', GOOD: 'Good', EASY: 'Easy' };
+
+// Fixed's stage/isComplete and Adaptive's stability are never both present
+// on one item (see item.mappers.js) -- showing STAGE_LABELS for an Adaptive
+// item would read its (always-undefined) stage as blank/broken text.
+function itemStatusLabel(item) {
+  if (item.mode === 'ADAPTIVE') {
+    return item.stability == null ? 'Adaptive · not yet reviewed' : `Adaptive · stability ${item.stability.toFixed(1)}d`;
+  }
+  return item.isComplete ? 'Archived' : STAGE_LABELS[item.stage];
+}
 
 const ITEM_ROW_CLASS =
   'flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 cursor-pointer hover:border-almanac-accent';
@@ -149,9 +161,9 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     }
   }
 
-  async function handleReview(itemId) {
+  async function handleReview(itemId, grade) {
     try {
-      await reviewItem(token, itemId);
+      await reviewItem(token, itemId, grade);
       await Promise.all([refreshDueItems(), refreshStats()]);
     } catch (err) {
       setError(err.message);
@@ -328,16 +340,29 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
               >
                 <div>
                   <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.text}</p>
-                  <span className="text-xs text-almanac-mute">{STAGE_LABELS[item.stage]}</span>
+                  <span className="text-xs text-almanac-mute">{itemStatusLabel(item)}</span>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleReview(item.id)}
-                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
-                  >
-                    Review
-                  </button>
+                <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+                  {item.mode === 'ADAPTIVE' ? (
+                    GRADES.map((grade) => (
+                      <button
+                        key={grade}
+                        type="button"
+                        onClick={() => handleReview(item.id, grade)}
+                        className="rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                      >
+                        {GRADE_LABELS[grade]}
+                      </button>
+                    ))
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleReview(item.id)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                    >
+                      Review
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleSkip(item.id)}
@@ -411,8 +436,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                   <div>
                     <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.preview}</p>
                     <span className="text-xs text-almanac-mute">
-                      {item.isComplete ? 'Archived' : STAGE_LABELS[item.stage]} · next review{' '}
-                      {item.nextReviewDate}
+                      {itemStatusLabel(item)} · next review {item.nextReviewDate}
                     </span>
                   </div>
                 </li>

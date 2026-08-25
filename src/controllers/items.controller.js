@@ -85,6 +85,15 @@ async function reviewItem(req, res, next) {
   }
 }
 
+async function getItemCurve(req, res, next) {
+  try {
+    const curve = await itemsService.getRetrievabilityCurve(req.userId, req.params.id, req.validatedQuery.date);
+    res.json(curve);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function skipItem(req, res, next) {
   try {
     const item = await itemsService.skipItem(req.userId, req.params.id, req.body.date);
@@ -135,6 +144,7 @@ module.exports = {
   deleteItem,
   listDue,
   reviewItem,
+  getItemCurve,
   skipItem,
   resetItem,
   switchMode,

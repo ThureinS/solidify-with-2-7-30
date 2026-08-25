@@ -8,6 +8,7 @@ const {
   listItemsQuerySchema,
   resetItemSchema,
   switchModeSchema,
+  curveQuerySchema,
 } = require('../dto/item.schemas');
 const {
   reviewActionSchema,
@@ -32,6 +33,7 @@ router.patch('/:id', validate(updateItemSchema), controller.updateItem);
 router.delete('/:id', controller.deleteItem);
 router.post('/:id/review', validate(reviewActionSchema), controller.reviewItem);
 router.post('/:id/skip', validate(skipActionSchema), controller.skipItem);
+router.get('/:id/curve', validate(curveQuerySchema, 'query'), controller.getItemCurve);
 router.post('/:id/reset', validate(resetItemSchema), controller.resetItem);
 router.post('/:id/mode', validate(switchModeSchema), controller.switchMode);
 

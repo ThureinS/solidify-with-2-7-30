@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getItem, updateItem, deleteItem } from './api';
+import { getItem, updateItem, deleteItem, getRetrievabilityCurve } from './api';
+import RetrievabilityCurve from './RetrievabilityCurve';
 
 // ponytail: duplicated from Dashboard; a shared constants module isn't worth it for one array.
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
@@ -9,12 +10,25 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [curve, setCurve] = useState(null);
 
   useEffect(() => {
     getItem(token, itemId)
       .then(setItem)
       .catch((err) => setError(err.message));
   }, [token, itemId]);
+
+  // Only an Adaptive item that's had at least one graded review has a real
+  // stability to plot -- fetch the curve only then (see item.mode/stability
+  // above; a brand-new/reset Adaptive item has stability: null and gets no
+  // curve at all, never a flat mocked one).
+  useEffect(() => {
+    if (item?.mode === 'ADAPTIVE' && item.stability != null) {
+      getRetrievabilityCurve(token, itemId)
+        .then(setCurve)
+        .catch((err) => setError(err.message));
+    }
+  }, [token, itemId, item?.mode, item?.stability]);
 
   function startEditing() {
     setDraft(item.text);
@@ -69,9 +83,13 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
 
   const statusLabel = item.deletedAt
     ? 'Deleted'
-    : item.isComplete
-      ? 'Archived'
-      : STAGE_LABELS[item.stage];
+    : item.mode === 'ADAPTIVE'
+      ? item.stability == null
+        ? 'Adaptive · not yet reviewed'
+        : `Adaptive · stability ${item.stability.toFixed(1)}d`
+      : item.isComplete
+        ? 'Archived'
+        : STAGE_LABELS[item.stage];
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-7">
@@ -139,6 +157,21 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
       </div>
 
       {error && <p className="text-sm text-almanac-accent">{error}</p>}
+
+      {item.mode === 'ADAPTIVE' && !item.deletedAt && (
+        <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6">
+          <h2 className="font-display text-lg font-medium mb-3">Memory-decay curve</h2>
+          {item.stability == null ? (
+            <p className="text-sm text-almanac-mute m-0">
+              No review history yet -- review this item to start tracking its memory curve.
+            </p>
+          ) : curve ? (
+            <RetrievabilityCurve curve={curve} />
+          ) : (
+            <p className="text-sm text-almanac-mute m-0">Loading&hellip;</p>
+          )}
+        </div>
+      )}
 
       {item.reviews.length > 0 && (
         <div>

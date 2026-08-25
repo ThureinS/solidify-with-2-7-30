@@ -112,6 +112,30 @@ function nextIntervalDays(stability) {
   return Math.min(Math.max(Math.round(interval), 1), MAXIMUM_INTERVAL_DAYS);
 }
 
+// How far out the memory-decay curve (build step 2) plots before recall
+// probability drops to a level that reads as meaningfully decayed -- same
+// inversion as nextIntervalDays, just aimed at a lower retention floor than
+// the 90% FSRS schedules for. FSRS-6's forgetting curve is a fat-tailed
+// power law (verified numerically, not assumed): the horizon needed to
+// reach a floor is a fixed multiple of stability regardless of its value,
+// but that multiple explodes fast below ~70% (9x stability -> 26x at 60% ->
+// 90x at 50%), so 0.7 is the lowest floor that stays a legible chart width
+// instead of an absurd multi-year axis for an everyday item.
+const CURVE_FLOOR_RETENTION = 0.7;
+const CURVE_POINTS = 30;
+
+// Sampled points from day 0 (last review) out to the floor above. minDays
+// stretches the horizon to at least cover a caller-supplied "elapsed since
+// last review" (e.g. today), so a real elapsed marker is never off-chart.
+function retrievabilityCurve(stability, minDays = 0) {
+  const floorDays = (stability / FACTOR) * (CURVE_FLOOR_RETENTION ** (1 / DECAY) - 1);
+  const horizon = Math.max(floorDays, minDays, 1);
+  return Array.from({ length: CURVE_POINTS + 1 }, (_, i) => {
+    const day = (horizon * i) / CURVE_POINTS;
+    return { day: Math.round(day * 10) / 10, retrievability: retrievability(stability, day) };
+  });
+}
+
 module.exports = {
   initialStability,
   initialDifficulty,
@@ -119,6 +143,7 @@ module.exports = {
   retrievability,
   nextStability,
   nextIntervalDays,
+  retrievabilityCurve,
   DEFAULT_PARAMETERS,
   DESIRED_RETENTION,
 };

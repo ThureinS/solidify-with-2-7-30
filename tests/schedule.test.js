@@ -206,6 +206,34 @@ describe('fsrs.retrievability / fsrs.nextIntervalDays round-trip', () => {
   });
 });
 
+describe('fsrs.retrievabilityCurve', () => {
+  it('starts at day 0 with 100% retrievability and decays monotonically', () => {
+    const points = fsrs.retrievabilityCurve(10);
+    expect(points[0]).toEqual({ day: 0, retrievability: 1 });
+    for (let i = 1; i < points.length; i += 1) {
+      expect(points[i].retrievability).toBeLessThan(points[i - 1].retrievability);
+    }
+  });
+
+  it('ends near the 70% floor its horizon is derived from', () => {
+    const points = fsrs.retrievabilityCurve(10);
+    expect(points.at(-1).retrievability).toBeCloseTo(0.7, 2);
+  });
+
+  it('a longer stability stretches the horizon out (slower forgetting = wider chart)', () => {
+    const short = fsrs.retrievabilityCurve(5);
+    const long = fsrs.retrievabilityCurve(50);
+    expect(long.at(-1).day).toBeGreaterThan(short.at(-1).day);
+  });
+
+  it('minDays stretches the horizon so a real elapsed marker is never off-chart', () => {
+    const withoutMarker = fsrs.retrievabilityCurve(5);
+    const withMarker = fsrs.retrievabilityCurve(5, 500); // way past its own 30% floor
+    expect(withMarker.at(-1).day).toBeGreaterThanOrEqual(500);
+    expect(withMarker.at(-1).day).toBeGreaterThan(withoutMarker.at(-1).day);
+  });
+});
+
 describe('start-of-life state (Reset / Mode switch share this)', () => {
   it('Fixed start-of-life: stage 0, due in 2 days, no FSRS state, keeps the given finalIntervalDays', () => {
     expect(fixedStartOfLife('2026-07-20', 45)).toEqual({

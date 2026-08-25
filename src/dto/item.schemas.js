@@ -36,10 +36,18 @@ const switchModeSchema = z.object({
   finalIntervalDays: z.coerce.number().int().min(1).max(3650).optional(),
 });
 
+// date is optional and client-provided (same rule as dueQuerySchema/
+// reviewHistoryQuerySchema) -- it only anchors the curve's "today" marker,
+// so omitting it just means no marker rather than a server-clock guess.
+const curveQuerySchema = z.object({
+  date: dateStringSchema.optional(),
+});
+
 module.exports = {
   createItemSchema,
   updateItemSchema,
   listItemsQuerySchema,
   resetItemSchema,
   switchModeSchema,
+  curveQuerySchema,
 };

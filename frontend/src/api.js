@@ -158,12 +158,18 @@ export function deleteItem(token, itemId) {
   return request(`/items/${itemId}`, { token, method: 'DELETE' });
 }
 
-export function reviewItem(token, itemId) {
+// grade is only meaningful (and only accepted) for Adaptive items -- Fixed
+// reviews call this with no grade at all, same as before.
+export function reviewItem(token, itemId, grade) {
   return request(`/items/${itemId}/review`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ date: todayLocal() }),
+    body: JSON.stringify({ date: todayLocal(), ...(grade ? { grade } : {}) }),
   });
+}
+
+export function getRetrievabilityCurve(token, itemId) {
+  return request(`/items/${itemId}/curve?date=${todayLocal()}`, { token });
 }
 
 export function skipItem(token, itemId) {

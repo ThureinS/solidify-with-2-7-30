@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma');
 const { AppError } = require('../middleware/errorHandler');
-const { parseDate, addDays, toDateString } = require('../lib/dates');
+const { parseDate, addDays, toDateString, daysBetween } = require('../lib/dates');
 const schedule = require('./schedule.service');
+const fsrs = require('./fsrs.service');
 
 async function createItem(userId, { text, date, mode, finalIntervalDays }) {
   const dateAdded = parseDate(date);
@@ -119,6 +120,26 @@ async function switchItemMode(userId, id, { mode, date, finalIntervalDays }) {
   return getItemById(userId, id);
 }
 
+// Retrievability curve: the item's own real Difficulty/Stability run
+// through fsrs.retrievabilityCurve -- never a mocked line (ADR 0003). No
+// curve exists before an item's first graded review, so a Fixed item or an
+// unreviewed Adaptive one is a rejected state, not a flat/defaulted line.
+async function getRetrievabilityCurve(userId, id, date) {
+  const item = await getItemById(userId, id);
+  if (item.mode !== 'ADAPTIVE') {
+    throw new AppError(400, 'ITEM_NOT_ADAPTIVE', 'Only Adaptive items have a retrievability curve');
+  }
+  if (item.stability == null) {
+    throw new AppError(409, 'NO_REVIEW_HISTORY', 'Item has no review history yet');
+  }
+
+  const elapsedDays = date ? daysBetween(item.lastReviewDate, parseDate(date)) : null;
+  const points = fsrs.retrievabilityCurve(item.stability, elapsedDays ?? 0);
+  const today =
+    elapsedDays == null ? undefined : { day: elapsedDays, retrievability: fsrs.retrievability(item.stability, elapsedDays) };
+  return { points, today };
+}
+
 async function skipItem(userId, id, date) {
   const item = await findOwnedItem(userId, id);
   const nextState = schedule.applySkip(item, date); // throws AppError if not allowed
@@ -211,6 +232,7 @@ module.exports = {
   softDeleteItem,
   listDueItems,
   reviewItem,
+  getRetrievabilityCurve,
   skipItem,
   resetItem,
   switchItemMode,

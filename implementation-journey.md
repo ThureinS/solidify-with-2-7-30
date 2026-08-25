@@ -2918,3 +2918,134 @@ stray grade on skip → reset → switch Adaptive → Fixed with a custom
    validates everything else about the request body?
 3. Reset and Mode switch both write zero `Review` rows. What would break if
    they wrote one (say, marking it `SKIPPED`) instead?
+   they wrote one (say, marking it `SKIPPED`) instead?
+
+## Production pivot, step 2: memory-decay curve (2026-08-25)
+
+Step 2 of the pivot: an Adaptive item's detail page now plots its real
+Retrievability curve — the predicted recall-probability line that FSRS
+itself decays from 100% since the item's last review, as a function of its
+own Stability. CONTEXT.md's Retrievability entry says this "isn't something
+the UI necessarily needs to show" — this feature is choosing to show it
+anyway, so ADR 0003 (showcase features must not misrepresent data) governed
+every decision below: the curve had to come from the item's real stored
+Difficulty/Stability, never a mocked or "plausible-looking" line.
+
+**Where the math lives.** A new `GET /items/:id/curve` endpoint
+(`items.routes.js` → `items.controller.getItemCurve` →
+`items.service.getRetrievabilityCurve`) reuses `fsrs.service.retrievability`
+directly rather than reimplementing the formula in the frontend. That was
+one of three choices put to me before writing code: compute on the backend
+(chosen) keeps the FSRS math in exactly one place, the same way
+`schedule.service`/`fsrs.service` already are the single source of truth for
+everything else Adaptive; embedding the curve straight into the existing
+`GET /items/:id` response was the zero-new-route alternative, rejected
+because `toExportItem` spreads that same response, which would have leaked a
+computed chart into every data export; reimplementing the formula in
+JavaScript on the frontend was rejected outright as duplicating FSRS's 21
+parameters a second time, in a second language.
+
+**Charting: researched, then chosen.** No chart library existed in this
+repo before today. Asked to research rather than guess, I compared
+Recharts, Chart.js, and Nivo for animation polish and default visual
+quality; Nivo's scoped packages (`@nivo/line` alone, not the whole
+ecosystem) and out-of-the-box polished SVG rendering won out for a feature
+whose whole point is looking good on a "showcase" detail page. It reads the
+Almanac design tokens (`--color-almanac-*`) straight out of `index.css` as
+literal CSS custom properties passed into Nivo's `colors`/`theme` props, so
+the chart re-themes for dark/light automatically — no separate light/dark
+chart config to keep in sync, verified in the browser by toggling the
+theme switch live.
+
+**A real math mistake, caught by a failing test before it ever shipped.**
+My first cut aimed the curve's horizon at a 30% retention floor — decay the
+curve out until predicted recall drops to 30%, using the same
+horizon-from-target-retention inversion `nextIntervalDays` already does for
+90%. A unit test (`minDays stretches the horizon...`) failed in a way that
+didn't make sense at first: two horizons that should have differed were
+identical. Digging in with a throwaway Node script (not guessed, actually
+computed) showed why: FSRS-6's forgetting curve is a fat-tailed power law,
+and the ratio (elapsed days ÷ stability) needed to reach any given
+retention floor is *constant regardless of the item's stability* — but that
+ratio explodes as the floor drops below ~70%: 9.3× stability to reach 70%
+retention, 27× for 60%, 90× for 50%, ~2,508× for 30%. A stability-5 item's
+30%-floor horizon was over 12,500 days (34 years) — a real property of the
+formula, not a bug, but useless for a chart. The floor became 70%
+(`CURVE_FLOOR_RETENTION` in `fsrs.service.js`), which still shows a real,
+visibly-decaying curve (the classic fast-initial-drop-then-flattening
+forgetting-curve shape) within a legible day range, and the comment in the
+code now states the actual numbers rather than an assumption.
+
+**"Today" stayed optional, following an existing convention rather than
+inventing a new one.** The curve endpoint takes an optional `date` query
+param, exactly like `reviewHistoryQuerySchema`'s `date` for
+`currentStreak` — client-provided, never defaulted to the server clock, and
+only present in the response (`today: { day, retrievability }`) when
+supplied. Omitting it just means no "today" marker on the chart, not a
+guess.
+
+**The null state was the real ADR 0003 trap, not an edge case.** A
+brand-new, reset, or just-mode-switched Adaptive item has `stability: null`
+and starts due *today* (per step 1) — so "no review history yet" is the
+*common* first state for any Adaptive item, not a rare corner. The frontend
+checks `item.stability == null` before ever calling the curve endpoint and
+renders an explicit "No review history yet" message instead — never a flat
+100% line, which would have been exactly the plausible-looking mock ADR
+0003 exists to block. Verified in the browser: a freshly created Adaptive
+item shows that message; the same item shows a real curve immediately after
+its first graded review.
+
+**A real prerequisite, not optional cleanup, fixed on the way.**
+`Dashboard.jsx` and `ItemDetail.jsx` were never made mode-aware in step 1 —
+both assumed every item has `stage`/`isComplete`, which are `undefined` for
+Adaptive items (see step 1's DTO note above: the two modes' fields never
+both appear). A shared `itemStatusLabel`/inline equivalent now branches on
+`item.mode`, showing `Adaptive · stability 2.3d` (or `· not yet reviewed`)
+instead of blank/broken stage text.
+
+**A second real gap, found while trying to verify this in the browser, not
+fixed.** There is currently no UI anywhere — not the create-item form, not
+anywhere on `ItemDetail` — that can create an item as Adaptive or switch an
+existing one's mode. `createItem` always sends Fixed's defaults. This is a
+leftover frontend gap from step 1's backend-only build, not something step 2
+asked me to touch, so I raised it rather than quietly building a mode
+picker as a side effect. To verify the curve end-to-end, I created one
+Adaptive test item directly through the API (`curve-test@example.com`, a
+throwaway local account) — but every *review* on it, including the one used
+to generate its first real Stability value, was done by clicking the actual
+grade buttons in the browser, not curled.
+
+**The other missing piece, closed as part of this step.** The due-items
+list's "Review" button sent no grade for any item — harmless for Fixed
+(which never needed one) but a hard `GRADE_REQUIRED` 400 for every Adaptive
+item, meaning the only in-app path that could ever produce a Stability
+value to plot was broken. Adaptive due-items now show four buttons (Again /
+Hard / Good / Easy) in place of the single Review button; `api.js`'s
+`reviewItem` takes an optional `grade` and only includes it in the request
+body when present, so Fixed reviews are byte-for-byte unchanged.
+
+**New concepts**
+
+- **Retrievability**: FSRS's own term for "the predicted probability of
+  recalling this item right now" — 100% right after a review, decaying
+  toward 0% the longer it's been, as a function of the item's Stability.
+  This is the curve build step 2 plots.
+- **Power-law decay**: a curve that falls fast at first and then flattens
+  out, but never as steeply as an exponential curve's long-run tail — the
+  practical consequence here being that *how far* you have to look before
+  recall probability drops to some low number grows extremely fast as that
+  number drops, independent of how "strong" the memory is.
+- **CSS custom properties as a theming bridge**: passing `var(--color-x)`
+  strings straight into a charting library's color/theme props, so an
+  existing dark/light toggle re-themes the chart for free, with no second
+  color config to keep in sync with the first.
+
+**You should be able to explain**
+
+1. Why does the curve's horizon stop at 70% retention instead of a
+   seemingly more dramatic, lower number like 30%?
+2. Why does the retrievability endpoint accept an optional `date` instead of
+   always anchoring "today" to the server's own clock?
+3. Why is "this Adaptive item has no curve yet" a state the UI has to
+   render on purpose, rather than something that can't really happen in
+   practice?
