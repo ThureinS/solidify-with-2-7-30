@@ -17,4 +17,10 @@ function toDateString(date) {
   return date.toISOString().slice(0, 10);
 }
 
-module.exports = { parseDate, addDays, toDateString };
+// Both dates must be UTC-midnight Date objects (parseDate/addDays output),
+// so this is exact integer division -- no DST rounding to guard against.
+function daysBetween(from, to) {
+  return Math.round((to - from) / (24 * 60 * 60 * 1000));
+}
+
+module.exports = { parseDate, addDays, toDateString, daysBetween };

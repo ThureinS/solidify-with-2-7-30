@@ -3,13 +3,14 @@ const { AppError } = require('../middleware/errorHandler');
 const { parseDate, addDays, toDateString } = require('../lib/dates');
 const schedule = require('./schedule.service');
 
-const FIRST_REVIEW_OFFSET_DAYS = 2;
-
-async function createItem(userId, { text, date }) {
+async function createItem(userId, { text, date, mode, finalIntervalDays }) {
   const dateAdded = parseDate(date);
-  const nextReviewDate = addDays(dateAdded, FIRST_REVIEW_OFFSET_DAYS);
+  const startState =
+    mode === 'ADAPTIVE'
+      ? schedule.adaptiveStartOfLife(date)
+      : schedule.fixedStartOfLife(date, finalIntervalDays);
   return prisma.item.create({
-    data: { userId, text, dateAdded, nextReviewDate, stage: 0 },
+    data: { userId, text, dateAdded, ...startState },
   });
 }
 
@@ -70,14 +71,51 @@ async function findOwnedItem(userId, id) {
   return item;
 }
 
-async function reviewItem(userId, id, date) {
+async function reviewItem(userId, id, date, grade) {
   const item = await findOwnedItem(userId, id);
-  const nextState = schedule.applyReview(item, date); // throws AppError if not allowed
+  const nextState = schedule.applyReview(item, date, grade); // throws AppError if not allowed
 
   await prisma.$transaction([
-    prisma.review.create({ data: { itemId: id, date: parseDate(date), result: 'REVIEWED' } }),
+    prisma.review.create({
+      data: {
+        itemId: id,
+        date: parseDate(date),
+        result: 'REVIEWED',
+        grade: item.mode === 'ADAPTIVE' ? grade : null,
+      },
+    }),
     prisma.item.update({ where: { id }, data: nextState }),
   ]);
+  return getItemById(userId, id);
+}
+
+// Reset: wipes progress back to the item's own mode's start-of-life state
+// (CONTEXT.md). A Fixed item keeps its existing finalIntervalDays -- that's
+// a setting, not progress. Writes no Review row: this isn't a review or a
+// skip, and deriveStreak/deriveReviewHistory would misread one as activity.
+async function resetItem(userId, id, date) {
+  const item = await findOwnedItem(userId, id);
+  const startState =
+    item.mode === 'ADAPTIVE'
+      ? schedule.adaptiveStartOfLife(date)
+      : schedule.fixedStartOfLife(date, item.finalIntervalDays);
+  await prisma.item.update({ where: { id }, data: startState });
+  return getItemById(userId, id);
+}
+
+// Mode switch: always a full reset onto the *new* mode's start-of-life
+// state, never a converted carry-over (CONTEXT.md) -- same underlying
+// operation as resetItem, just landing on a possibly-different mode.
+// finalIntervalDays only matters when switching to Fixed; if omitted, the
+// item's current value carries over (e.g. Fixed -> Adaptive -> back to
+// Fixed keeps the original setting unless the caller overrides it).
+async function switchItemMode(userId, id, { mode, date, finalIntervalDays }) {
+  const item = await findOwnedItem(userId, id);
+  const startState =
+    mode === 'ADAPTIVE'
+      ? schedule.adaptiveStartOfLife(date)
+      : schedule.fixedStartOfLife(date, finalIntervalDays ?? item.finalIntervalDays);
+  await prisma.item.update({ where: { id }, data: startState });
   return getItemById(userId, id);
 }
 
@@ -174,6 +212,8 @@ module.exports = {
   listDueItems,
   reviewItem,
   skipItem,
+  resetItem,
+  switchItemMode,
   getReviewHistory,
   deriveReviewHistory,
   getCurrentStreak,

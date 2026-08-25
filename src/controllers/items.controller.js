@@ -78,7 +78,7 @@ async function listDue(req, res, next) {
 
 async function reviewItem(req, res, next) {
   try {
-    const item = await itemsService.reviewItem(req.userId, req.params.id, req.body.date);
+    const item = await itemsService.reviewItem(req.userId, req.params.id, req.body.date, req.body.grade);
     res.json(toItemDetail(item));
   } catch (err) {
     next(err);
@@ -88,6 +88,24 @@ async function reviewItem(req, res, next) {
 async function skipItem(req, res, next) {
   try {
     const item = await itemsService.skipItem(req.userId, req.params.id, req.body.date);
+    res.json(toItemDetail(item));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resetItem(req, res, next) {
+  try {
+    const item = await itemsService.resetItem(req.userId, req.params.id, req.body.date);
+    res.json(toItemDetail(item));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function switchMode(req, res, next) {
+  try {
+    const item = await itemsService.switchItemMode(req.userId, req.params.id, req.body);
     res.json(toItemDetail(item));
   } catch (err) {
     next(err);
@@ -118,5 +136,7 @@ module.exports = {
   listDue,
   reviewItem,
   skipItem,
+  resetItem,
+  switchMode,
   reviewHistory,
 };

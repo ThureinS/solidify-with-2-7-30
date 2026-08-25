@@ -2776,3 +2776,145 @@ time. Logged in `neon_password_exposure.md`.
 3. Two requests 401 at almost the same instant, and both start their own
    `/auth/refresh` call. Walk through exactly what goes wrong, step by step,
    ending in the user getting logged out.
+
+## 2026-08-25 — Production pivot, step 1: schedule modes (Fixed generalized + Adaptive/FSRS)
+
+This starts the production pivot spec'd out in an earlier `/grill-with-docs`
+session (`CONTEXT.md`, `docs/adr/0001`–`0004`) — the app is growing a second
+scheduling mode alongside the original 2-7-30 ladder, since "always review
+in exactly 2/7/30 days, no rating" is a deliberate simplification that a
+real spaced-repetition tool shouldn't be the *only* option for.
+
+**What changed.** `Item` gained `mode` (`FIXED`/`ADAPTIVE`, default `FIXED`
+so every existing item keeps behaving exactly as before), `finalIntervalDays`
+(the old hardcoded `30`, now a per-item setting), and three Adaptive-only
+fields: `difficulty`, `stability`, `lastReviewDate`. `Review` gained an
+optional `grade`. Fixed Mode's ladder logic barely changed — only the
+stage-1→2 interval now reads `item.finalIntervalDays` instead of a constant.
+Adaptive Mode is new: a `fsrs.service.js` module implements FSRS's forgetting
+curve, and `schedule.service.js` dispatches `applyReview` to either the old
+Fixed logic or the new Adaptive one based on `item.mode`. Two new item
+actions, `reset` and `mode` (switch), both build on the same pair of
+"start-of-life state" functions — the CONTEXT.md glossary calls Mode switch
+and Reset "the same underlying operation," so the code has exactly one
+implementation of that operation, not two similar ones.
+
+**Where the FSRS numbers actually came from.** ADR 0002 said "use FSRS's
+published default parameters, don't invent them" — so rather than recall
+them from memory (a real risk of misremembering a decimal and quietly
+breaking every Adaptive item's math), I fetched the actual source: GitHub's
+`open-spaced-repetition/py-fsrs` repo, `fsrs/scheduler.py`. That gave the 21
+real weights (FSRS-6), the exact retrievability/stability/difficulty
+formulas, and confirmed the default desired-retention (90%) and the
+effectively-uncapped maximum interval (100 years) — all copied verbatim,
+with a comment recording exactly where they came from and that the
+parameter count (21) is what ties them to FSRS-6 specifically.
+
+**A decision CONTEXT.md left open, asked rather than guessed.** The
+glossary spells out Fixed Mode's start-of-life due date explicitly
+(`today + 2` — the original 2-7-30's first offset) but says nothing about
+Adaptive's. Two readings both made sense: reuse the same `+2` offset for
+uniformity, or make it due immediately since FSRS itself has no "first
+interval" concept before a card has ever been graded. Rather than pick one
+silently, I asked directly — the answer was **due today**, so a brand-new
+(or reset, or newly-switched) Adaptive item shows up in today's due list
+right away, with no Difficulty/Stability yet.
+
+**Why Adaptive reviews never hit FSRS's same-day branch.** The full FSRS
+scheduler (as used by Anki) has a "short-term stability" formula for
+reviewing the same card twice in one sitting. This app doesn't need it:
+`isDueOn` already forbids reviewing before `nextReviewDate`, and
+`nextIntervalDays` never returns less than 1 — so by the time a second
+Adaptive review is possible, at least one full day has always passed since
+the last one. That's not an assumption; it's provable from code already in
+the file, so the module only implements the "Review state" subset of the
+real scheduler and says so in a comment, rather than porting machinery this
+app's own rules make unreachable.
+
+**Why Skip needed zero changes for Adaptive.** Skipping only ever moved
+`nextReviewDate` forward by one day and touched nothing else — which was
+already exactly right for Adaptive too (it doesn't touch Difficulty,
+Stability, or `lastReviewDate` either). The one new test here isn't testing
+new logic, it's proving old logic already had the right shape: skip an
+Adaptive item, then review it, and check the *elapsed-days* calculation
+still uses the real pre-skip `lastReviewDate`, not something the skip
+silently changed.
+
+**Where mode-mismatch validation lives, and why.** A grade is required for
+Adaptive reviews and forbidden for Fixed ones (`GRADE_REQUIRED` /
+`GRADE_NOT_ALLOWED`, both 400s) — but that check can't live in the Zod
+schema, because Zod only sees the request body, not which mode the item in
+the database is actually in. It lives in `schedule.service.applyReview`
+instead, right next to the due-date check that has the same shape (business
+rule that depends on the item's current state, not just the shape of the
+input).
+
+**Why the item DTOs became mode-aware instead of one flat shape.**
+`stage`/`isComplete` describe a 3-rung ladder that only exists for Fixed
+Mode — showing them for an Adaptive item (which never archives and has no
+rungs) would be exactly the "a number not backed by real data" mistake
+ADR 0003 was written to block, the same mistake the review-history moon grid
+made once already. So `toItemSummary`/`toItemDetail` now emit `stage` /
+`finalIntervalDays` / `isComplete` for Fixed items, and `difficulty` /
+`stability` / `lastReviewDate` for Adaptive ones — never both, never neither.
+
+**Problems hit, in order:**
+- Refactoring `createItem`'s date-handling accidentally dropped `addDays`
+  from `items.service.js`'s import line — caught immediately by the editor's
+  own diagnostics (`deriveStreak`, lower in the same file, still used it),
+  before it ever reached a test run.
+- `prisma migrate dev` applied the new columns to the local dev Postgres but
+  didn't regenerate the client used by the running smoke test — every
+  `prisma.item.create()` call errored with `Unknown argument 'mode'` until
+  an explicit `npx prisma generate` picked up the new schema.
+- No local Postgres/Redis were running at all (Docker Desktop wasn't even
+  open) — started both via the project's own `docker-compose.yml` (`db` and
+  `redis` services only) purely for this session's migration and smoke
+  test, then stopped and removed both containers afterward so nothing keeps
+  running that wasn't asked for.
+
+**Verified with:** the full Vitest suite (51 tests, including 21 new ones:
+mode dispatch, grade validation, an algebraic check that
+`retrievability(S, nextIntervalDays(S)) ≈ 90%` — proving `FACTOR`/`DECAY`
+are wired correctly rather than merely "looking plausible" — a golden value
+tying a first `GOOD` review's stability to FSRS's own published `w[2]`
+constant, and the skip-preserves-`lastReviewDate` check described above);
+and a live end-to-end pass against the real Express app + local Postgres
+(via `supertest`, since curling `localhost:3000` in this environment
+returned an unrelated frontend dev server rather than the API) covering
+register → login → create Fixed item → review → reject a stray grade →
+create Adaptive item → reject a missing grade → review with `GOOD` (got
+back exactly `stability: 2.3065`, FSRS's own `w[2]`, live) → skip → reject a
+stray grade on skip → reset → switch Adaptive → Fixed with a custom
+`finalIntervalDays`.
+
+**New concepts**
+
+- **FSRS** (Free Spaced Repetition Scheduler): the algorithm Adaptive Mode
+  uses, and also the one modern Anki now schedules cards with by default.
+  Unlike a fixed ladder, it tracks two numbers per item (Difficulty,
+  Stability) that update after every graded review, so the next interval is
+  a calculation instead of a table lookup.
+- **Difficulty / Stability / Retrievability** (FSRS's own terms): Difficulty
+  is "how hard is this specific card to remember," Stability is "how many
+  days until recall probability decays to the target," and Retrievability
+  is "the predicted recall probability right now" — the number the
+  memory-decay curve (next build step) will actually plot.
+- **Grade**: the `Again`/`Hard`/`Good`/`Easy` rating a user gives at each
+  Adaptive review — separate from FSRS's own Difficulty, which is a
+  persistent per-item value updated *by* a Grade, not the Grade itself.
+- **Discriminated/mode-aware response shape**: an API response whose set of
+  fields depends on a `mode`/`type` value in the same payload, documented in
+  OpenAPI with `oneOf`. Used here so a Fixed item's JSON and an Adaptive
+  item's JSON each only ever contain fields that mean something for that
+  item.
+
+**You should be able to explain**
+
+1. Why is it *provable* (not just "probably fine") that an Adaptive review
+   never needs FSRS's same-day short-term-stability formula in this app?
+2. Why does `GRADE_REQUIRED`/`GRADE_NOT_ALLOWED` validation live in
+   `schedule.service.js` instead of the Zod request schema, when Zod already
+   validates everything else about the request body?
+3. Reset and Mode switch both write zero `Review` rows. What would break if
+   they wrote one (say, marking it `SKIPPED`) instead?

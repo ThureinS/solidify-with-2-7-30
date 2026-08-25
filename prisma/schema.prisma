@@ -16,6 +16,20 @@ enum ReviewResult {
   SKIPPED
 }
 
+enum ItemMode {
+  FIXED
+  ADAPTIVE
+}
+
+// The judgment given at each Adaptive Mode review (see CONTEXT.md). Fixed
+// Mode reviews never carry one.
+enum Grade {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -58,8 +72,17 @@ model Item {
   text           String
   dateAdded      DateTime  @db.Date
   nextReviewDate DateTime  @db.Date
+  mode           ItemMode  @default(FIXED)
   stage          Int       @default(0)
   isComplete     Boolean   @default(false)
+  // Fixed Mode only: the configurable longest ladder rung (default 30, the
+  // original graded-spec value). Unused while mode is ADAPTIVE.
+  finalIntervalDays Int    @default(30)
+  // Adaptive Mode only (FSRS state, see CONTEXT.md); null until the item's
+  // first Adaptive review.
+  difficulty     Float?
+  stability      Float?
+  lastReviewDate DateTime? @db.Date
   deletedAt      DateTime? @db.Date
 
   user    User     @relation(fields: [userId], references: [id])
@@ -74,6 +97,9 @@ model Review {
   itemId String
   date   DateTime     @db.Date
   result ReviewResult
+  // Set only for Adaptive Mode REVIEWED rows; null for Fixed Mode and for
+  // every SKIPPED row regardless of mode.
+  grade  Grade?
 
   item Item @relation(fields: [itemId], references: [id])
 

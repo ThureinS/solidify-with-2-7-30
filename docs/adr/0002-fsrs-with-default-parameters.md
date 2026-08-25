@@ -1,0 +1,5 @@
+# Adaptive Mode uses FSRS with fixed default parameters, not SM-2 or personalized FSRS
+
+Three options were on the table for Adaptive Mode's scheduling algorithm (see [CONTEXT.md](../../CONTEXT.md)): classic SM-2 (Anki's original 1985 algorithm, one ease factor per item — simple, well-known, but a fixed heuristic); full personalized FSRS (fits ~19 parameters per user from their own review history — the most accurate option, but effectively a small ML optimization project, needing an optimizer and enough review data per user before it's even trainable); and FSRS run with its published default parameters (no per-user fitting).
+
+Decided: **FSRS with fixed default parameters.** It's meaningfully more accurate than SM-2 — modern Anki switched to it as the default scheduler for this reason — while the implementation is comparable in shape to SM-2 (fixed formulas, no optimizer, no training data requirement). Full personalized FSRS was rejected as over-engineering at this project's scope: the optimizer and per-user data pipeline it needs is a substantial build for a benefit that wouldn't show in a demo.

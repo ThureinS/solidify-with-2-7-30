@@ -1,14 +1,34 @@
 const { toDateString } = require('../lib/dates');
 
+// Mode-specific fields only. `stage`/`isComplete` claim there's a 3-rung
+// ladder underway -- true for Fixed, meaningless for Adaptive (which never
+// archives and has no rungs). Emitting them for an Adaptive item would be
+// exactly the "number not backed by real data" ADR 0003 exists to block, so
+// each mode gets only the fields that mean something for it.
+function modeFields(item) {
+  if (item.mode === 'ADAPTIVE') {
+    return {
+      difficulty: item.difficulty,
+      stability: item.stability,
+      lastReviewDate: item.lastReviewDate ? toDateString(item.lastReviewDate) : null,
+    };
+  }
+  return {
+    stage: item.stage,
+    finalIntervalDays: item.finalIntervalDays,
+    isComplete: item.isComplete,
+  };
+}
+
 function toItemSummary(item) {
   const firstLine = item.text.split('\n')[0];
   return {
     id: item.id,
     preview: firstLine.slice(0, 80),
-    stage: item.stage,
+    mode: item.mode,
     dateAdded: toDateString(item.dateAdded),
     nextReviewDate: toDateString(item.nextReviewDate),
-    isComplete: item.isComplete,
+    ...modeFields(item),
   };
 }
 
@@ -16,15 +36,16 @@ function toItemDetail(item) {
   return {
     id: item.id,
     text: item.text,
-    stage: item.stage,
+    mode: item.mode,
     dateAdded: toDateString(item.dateAdded),
     nextReviewDate: toDateString(item.nextReviewDate),
-    isComplete: item.isComplete,
     deletedAt: item.deletedAt ? toDateString(item.deletedAt) : null,
+    ...modeFields(item),
     reviews: (item.reviews || []).map((review) => ({
       id: review.id,
       date: toDateString(review.date),
       result: review.result,
+      grade: review.grade,
     })),
   };
 }

@@ -2,11 +2,16 @@ openapi: 3.0.3
 info:
   title: Spaced Repetition Review Tracker API
   description: >
-    Backend for a personal spaced-repetition learning tracker using the
-    2-7-30 review method: the first review is due 2 calendar days after an
-    item is added; after each completed review, the next is scheduled 7 and
-    then 30 days from the completion date; after the third review the item
-    is archived.
+    Backend for a personal spaced-repetition learning tracker. Each item
+    picks one of two scheduling modes at creation (see CONTEXT.md):
+    Fixed Mode is the original 2-7-30 ladder, generalized so the final
+    interval is configurable -- the first review is due 2 calendar days
+    after an item is added, the next is scheduled 7 days from the
+    completion date, then a configurable final interval (default 30),
+    after which the item archives. Adaptive Mode uses FSRS: each review
+    takes a Grade (Again/Hard/Good/Easy) and the next interval is computed
+    from the item's own Difficulty/Stability, with no fixed ceiling and no
+    archiving.
   version: 1.0.0
 servers:
   - url: /api/v1
@@ -49,19 +54,44 @@ components:
         id: { type: string, format: uuid }
         date: { type: string, format: date }
         result: { type: string, enum: [REVIEWED, SKIPPED] }
+        grade:
+          type: string
+          enum: [AGAIN, HARD, GOOD, EASY]
+          nullable: true
+          description: Set only for Adaptive Mode REVIEWED rows; null for Fixed Mode and for every SKIPPED row.
 
     ItemCore:
       type: object
       properties:
         id: { type: string, format: uuid }
-        stage: { type: integer, enum: [0, 1, 2], description: "0 = awaiting 2-day review, 1 = awaiting 7-day, 2 = awaiting 30-day" }
+        mode: { type: string, enum: [FIXED, ADAPTIVE] }
         dateAdded: { type: string, format: date }
         nextReviewDate: { type: string, format: date }
+
+    # Present only when mode = FIXED. Omitted entirely for Adaptive items --
+    # they never archive and have no ladder rungs, so these fields would
+    # claim progress that isn't real (see ADR 0003).
+    FixedItemFields:
+      type: object
+      properties:
+        stage: { type: integer, enum: [0, 1, 2], description: "0 = awaiting 2-day review, 1 = awaiting 7-day, 2 = awaiting the final interval" }
+        finalIntervalDays: { type: integer, description: Configurable longest ladder rung, default 30 }
         isComplete: { type: boolean }
+
+    # Present only when mode = ADAPTIVE.
+    AdaptiveItemFields:
+      type: object
+      properties:
+        difficulty: { type: number, nullable: true, description: "FSRS Difficulty; null until the item's first Adaptive review" }
+        stability: { type: number, nullable: true, description: "FSRS Stability; null until the item's first Adaptive review" }
+        lastReviewDate: { type: string, format: date, nullable: true }
 
     ItemSummary:
       allOf:
         - $ref: '#/components/schemas/ItemCore'
+        - oneOf:
+            - $ref: '#/components/schemas/FixedItemFields'
+            - $ref: '#/components/schemas/AdaptiveItemFields'
         - type: object
           properties:
             preview: { type: string, description: First 80 characters of the item's text }
@@ -69,6 +99,9 @@ components:
     ItemDetail:
       allOf:
         - $ref: '#/components/schemas/ItemCore'
+        - oneOf:
+            - $ref: '#/components/schemas/FixedItemFields'
+            - $ref: '#/components/schemas/AdaptiveItemFields'
         - type: object
           properties:
             text: { type: string }
@@ -203,6 +236,8 @@ paths:
               properties:
                 text: { type: string, minLength: 1, maxLength: 10000 }
                 date: { type: string, format: date, description: "Client's today, YYYY-MM-DD" }
+                mode: { type: string, enum: [FIXED, ADAPTIVE], default: FIXED }
+                finalIntervalDays: { type: integer, default: 30, description: Fixed Mode only; ignored for Adaptive }
             example: { text: "The mitochondria is the powerhouse of the cell.", date: "2026-07-18" }
       responses:
         '201':
@@ -292,6 +327,11 @@ paths:
   /items/{id}/review:
     post:
       summary: Record a review for a due item and advance its schedule
+      description: >
+        grade is required for Adaptive Mode items (400 GRADE_REQUIRED if
+        missing) and forbidden for Fixed Mode items (400 GRADE_NOT_ALLOWED
+        if present) -- Fixed Mode reviews stay the binary REVIEWED/SKIPPED
+        they've always been.
       parameters:
         - $ref: '#/components/parameters/ItemId'
       requestBody:
@@ -303,13 +343,19 @@ paths:
               required: [date]
               properties:
                 date: { type: string, format: date }
+                grade: { type: string, enum: [AGAIN, HARD, GOOD, EASY], description: Adaptive Mode only }
             example: { date: "2026-07-18" }
       responses:
         '200':
-          description: Item after advancing (or archived)
+          description: Item after advancing (or archived, Fixed Mode only)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ItemDetail' }
+        '400':
+          description: grade missing for an Adaptive item, or present for a Fixed item
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '409':
           description: Item is not due yet, or already archived
           content:
@@ -319,6 +365,7 @@ paths:
   /items/{id}/skip:
     post:
       summary: Skip a due item -- pushes it to the next day
+      description: Same for both modes; never touches stage or FSRS state.
       parameters:
         - $ref: '#/components/parameters/ItemId'
       requestBody:
@@ -337,11 +384,72 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ItemDetail' }
+        '400':
+          description: Request body carried a grade, which skip never takes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '409':
           description: Item is not due yet, or already archived
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /items/{id}/reset:
+    post:
+      summary: Wipe an item's progress back to its own mode's start-of-life state
+      description: >
+        Fixed Mode resets to stage 0, due in 2 days, keeping the item's
+        existing finalIntervalDays. Adaptive Mode resets to no
+        Difficulty/Stability, due today. Writes no Review row.
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                date: { type: string, format: date }
+            example: { date: "2026-07-18" }
+      responses:
+        '200':
+          description: Item at its mode's start-of-life state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
+
+  /items/{id}/mode:
+    post:
+      summary: Switch an item's scheduling mode
+      description: >
+        Always a full reset onto the new mode's start-of-life state, never
+        a converted carry-over -- the same underlying operation as Reset,
+        just possibly landing on a different mode. finalIntervalDays only
+        matters when switching to Fixed; if omitted, the item's current
+        value carries over.
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, date]
+              properties:
+                mode: { type: string, enum: [FIXED, ADAPTIVE] }
+                date: { type: string, format: date }
+                finalIntervalDays: { type: integer, description: Fixed Mode only }
+            example: { mode: FIXED, date: "2026-07-18", finalIntervalDays: 30 }
+      responses:
+        '200':
+          description: Item at the new mode's start-of-life state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemDetail' }
 
   /export:
     get:
@@ -365,7 +473,9 @@ paths:
                 items:
                   - id: 3f24534e-958b-486c-80d3-7dbd2a3490b1
                     text: "Due today: awaiting the 2-day review."
+                    mode: FIXED
                     stage: 0
+                    finalIntervalDays: 30
                     dateAdded: "2026-07-16"
                     nextReviewDate: "2026-07-18"
                     isComplete: false
