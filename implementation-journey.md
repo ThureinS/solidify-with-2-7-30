@@ -3049,3 +3049,150 @@ body when present, so Fixed reviews are byte-for-byte unchanged.
 3. Why is "this Adaptive item has no curve yet" a state the UI has to
    render on purpose, rather than something that can't really happen in
    practice?
+
+## Production pivot, step 3: public read-only demo link (2026-08-25)
+
+Step 3 of the pivot: an unauthenticated route (`/api/v1/demo/*`) that always
+serves the same fixed, clearly-fake seeded account
+(`stats-test@example.com`, from `scripts/seed-test-data.js`) so the
+supervisor's showcase page has something real to point at without any real
+user's data ever being reachable through it. ADR 0004 governed the whole
+design: read-only has to be enforced **in the backend**, for every mutating
+action, regardless of what the client sends — not just hidden buttons on
+the frontend.
+
+**Where the route table lives, and why it isn't duplicated.** `items.routes.js`
+and `export.routes.js` were each refactored from a fixed router into a small
+factory (`buildItemsRouter(identifyUser)` / `buildExportRouter(identifyUser)`)
+that takes "how do we know who this request is" as a parameter and always
+chains a new `blockDemoWrites` guard right after it. `app.js` calls the
+factories with `requireAuth` for the real mounts; a new `demo.routes.js`
+calls them again with `demoAuth` for `/api/v1/demo`. One route list, used
+twice — a mutating route added to the real API later is automatically both
+reachable under `/demo` and blocked there, instead of needing someone to
+remember to update a second, hand-copied route file. This was one of two
+options put to me before writing code: the alternative (a hand-duplicated
+`demo.routes.js` with its own copy of the route list) would have left the
+real API's `items.routes.js` completely untouched, lower short-term risk to
+working code, but with the route tables able to silently drift apart. I
+recommended the factory and went with it.
+
+**Two new pieces of identity, and why they're separate.** `demoAuth.js`
+reads no Authorization header at all — it always looks up the one hardcoded
+account and sets `req.user`/`req.userId`, unauthenticated by design.
+`blockDemoWrites.js` is a separate, tiny guard: given whatever `req.user`
+already got resolved to (by `demoAuth` *or* by the real `requireAuth`), it
+rejects any non-GET/HEAD/OPTIONS request if that user's email matches the
+fixed demo account. Splitting these two apart means the write-guard also
+protects the normal authenticated `/api/v1/items` path, not just the demo
+mount — so even if someone somehow logged into `stats-test@example.com`
+directly (they'd need `DEMO_PASSWORD`, which isn't published anywhere),
+mutations on that account are still blocked. That's the literal "regardless
+of what the client sends" from ADR 0004, not just a property of the new
+route.
+
+**The demo account's identity is hardcoded, not an env var — deliberately.**
+The seed script already read `process.env.DEMO_EMAIL` with a fallback, which
+is fine for a local convenience override. But if the *API* resolved the
+public demo route's identity from an env var too, a deploy's environment
+could quietly repoint the public unauthenticated route at any account —
+exactly the failure mode ADR 0004 rejected when it ruled out user opt-in.
+`src/lib/demoAccount.js` exports one hardcoded constant; the seed script now
+imports it as its own default instead of hardcoding the string a second
+time, so there's exactly one place this email is spelled out.
+
+**The seed script gap, fixed as part of this step, not after.** Every item
+`scripts/seed-test-data.js` created defaulted to Fixed Mode — found right
+after step 2 shipped, since nothing had ever created an Adaptive item
+through the seed path. Left alone, the public demo would never show the
+memory-decay curve or a mode-aware item badge at all. Two Adaptive items
+were added: one brand new with no review history (`stability: null`, due
+today) and one with three simulated reviews (`GOOD`/`HARD`/`GOOD`, last
+reviewed 3 days ago, not due yet — showing a real, still-mostly-fresh
+retrievability curve). Both are kept **out of** the existing `items` array
+that the 90-day history loop (`addDay`) indexes into — that loop attaches
+plain `REVIEWED`/`SKIPPED` rows at dates chosen by a modulo pattern with no
+idea an item's FSRS state exists, so letting it touch an Adaptive item would
+have attached rows contradicting the item's simulated `lastReviewDate`, an
+ADR 0003 violation baked directly into the fixture.
+
+**A real design question, asked rather than defaulted.** ADR 0003 says
+showcase *features* reading stored data must not misrepresent it, but it
+doesn't say anything about how fake seed data itself should be produced.
+Two options existed for the reviewed Adaptive item's numbers: hand-pick a
+difficulty/stability that looks plausible, or actually run a fabricated
+grade sequence through `schedule.service.applyReview` — the exact pure
+function production reviews call — so the numbers are genuine FSRS output.
+Asked directly rather than picking the faster one silently; the answer was
+the simulated version, which turned out to cost almost nothing extra since
+`applyReview` is already a pure function with no DB dependency.
+
+**Simulating forward, then shifting — not simulating from "N days ago"
+directly.** The obvious-looking approach (pick a start date N days before
+today, chain reviews forward from there) doesn't work: each review's next
+due date depends on the *interval FSRS computes from the previous review*,
+which isn't known until it's actually run — so there's no way to pick a
+start offset and land the *last* review exactly "3 days ago" on the first
+try. Instead, `simulateAdaptiveItem` runs the whole grade sequence from a
+nominal fixed start date (`2000-01-01`), finds out empirically where the
+last review actually landed, then shifts every date in the result —
+`dateAdded`, every review row, `lastReviewDate`, `nextReviewDate` — by one
+constant so the last review lands on the target day. This is safe because
+FSRS's math only depends on *elapsed days between* reviews, never on
+absolute calendar dates.
+
+**Verified with:** the existing 58-test Vitest suite still green after the
+route-factory refactor (a regression check, not new coverage for it, since
+Express wiring doesn't cleanly unit-test), plus one new committed test file
+(`tests/blockDemoWrites.test.js`) covering the actual security-relevant
+logic in isolation: every mutating method rejected with `DEMO_READ_ONLY` for
+the demo account, every safe method allowed, and a real account never
+blocked. Beyond that, a live end-to-end pass with `supertest` against the
+real Express app plus a freshly seeded local Postgres (curling
+`localhost:3000` in this environment hits an unrelated frontend dev server,
+same as steps 1–2) checked exactly the things a hidden-button
+implementation would get wrong: every one of the seven mutating routes
+individually enumerated → 403 (not sampled), a GET with zero Authorization
+header still serving real data, a *valid token for a different real user*
+sent to `/demo/items` still returning the demo account's own items (proving
+`demoAuth` ignores whatever the client sends rather than falling through to
+it), and — as a regression check on the factory refactor — a real
+authenticated user's create/delete on `/api/v1/items` still working
+unchanged.
+
+**Deliberately out of scope, per a decision made before writing code.** This
+step is backend-only: the route, the guard, and the seed fix, verified
+without a browser. There is still no frontend page that hits `/api/v1/demo/*`
+with no login — that's a small, separate follow-up before step 4 (stats
+dashboard), not folded in here, so this step stayed reviewable as one
+self-contained change.
+
+**New concepts**
+
+- **Route factory**: a function that returns an Express router instead of
+  exporting one directly, so the same route table can be instantiated twice
+  with different middleware — here, once with real auth and once with the
+  demo pseudo-auth — without copy-pasting the list of endpoints.
+- **Defense in depth**: protecting the same invariant (the demo account
+  can't be written to) at more than one layer, so a bug or an unexpected
+  path in one layer doesn't remove the protection entirely. Here:
+  `blockDemoWrites` runs regardless of which "who is this" middleware
+  resolved `req.user`, not just on the new `/demo` mount.
+- **Simulate-then-shift**: producing a realistic-looking history by running
+  real logic from a nominal starting point and translating every resulting
+  date by a constant offset afterward, used when the logic's *output*
+  determines timing you can't predict in advance (here, FSRS's computed
+  intervals).
+
+**You should be able to explain**
+
+1. Why does `blockDemoWrites` check `req.user.email`, checked after
+   whichever auth middleware ran, instead of just never adding write routes
+   to the `/demo` mount in the first place?
+2. Why is the demo account's email a hardcoded constant in
+   `src/lib/demoAccount.js` instead of an environment variable, when the
+   seed script's own `DEMO_EMAIL` override is still fine to keep as an env
+   var?
+3. Why does `simulateAdaptiveItem` run its grade sequence from a fixed
+   nominal date and shift the result afterward, instead of simulating
+   forward starting from "3 days ago" directly?

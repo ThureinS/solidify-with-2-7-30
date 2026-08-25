@@ -7,10 +7,12 @@ const cors = require('cors');
 const yaml = require('js-yaml');
 const swaggerUi = require('swagger-ui-express');
 const authRoutes = require('./routes/auth.routes');
-const itemsRoutes = require('./routes/items.routes');
+const buildItemsRouter = require('./routes/items.routes');
 const adminRoutes = require('./routes/admin.routes');
-const exportRoutes = require('./routes/export.routes');
+const buildExportRouter = require('./routes/export.routes');
+const demoRoutes = require('./routes/demo.routes');
 const redis = require('./lib/redis');
+const requireAuth = require('./middleware/auth');
 const generalRateLimit = require('./middleware/generalRateLimit');
 const { errorHandler } = require('./middleware/errorHandler');
 
@@ -77,9 +79,10 @@ app.get('/api/v1/health', async (req, res) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/items', itemsRoutes);
+app.use('/api/v1/items', buildItemsRouter(requireAuth));
 app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/export', exportRoutes);
+app.use('/api/v1/export', buildExportRouter(requireAuth));
+app.use('/api/v1/demo', demoRoutes);
 
 // 404 for any route we haven't defined
 app.use((req, res) => {
