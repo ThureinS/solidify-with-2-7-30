@@ -33,6 +33,9 @@ export default function AlmanacShell({ onToggleMode, loggedIn, onLogout, childre
               <NavLink to="/history" className={navLinkClass}>
                 History
               </NavLink>
+              <NavLink to="/stats" className={navLinkClass}>
+                Stats
+              </NavLink>
             </>
           )}
           <button type="button" onClick={onToggleMode} className={chromeButtonClass}>

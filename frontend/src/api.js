@@ -180,6 +180,21 @@ export function skipItem(token, itemId) {
   });
 }
 
+export function getStats(token) {
+  return request('/items/stats', { token });
+}
+
+// --- Public read-only demo (ADR 0004): no token, always the fixed seeded
+// account, same route table as above under /demo instead of /items. ---
+
+export function getDemoStats() {
+  return request('/demo/items/stats');
+}
+
+export function getDemoDueItems() {
+  return request(`/demo/items/due?date=${todayLocal()}`);
+}
+
 // --- Current user + admin ---
 
 // How the client learns its own role/id. Same user shape as the admin list.

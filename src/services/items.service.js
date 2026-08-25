@@ -224,6 +224,73 @@ async function getCurrentStreak(userId, today) {
   return deriveStreak(rows.map((r) => toDateString(r.date)), today);
 }
 
+// Pure: buckets Review.groupBy([date, result]) rows into ISO weeks
+// (Monday-anchored), summing raw REVIEWED/SKIPPED counts. Counts only, never
+// a ratio -- a reviewed/skipped fraction needs a denominator of "items due
+// that week", which isn't stored, so charting one would claim a rate the
+// data can't support (ADR 0003, the same trap Dashboard.jsx's completion
+// stat already documents: it can't tell 2-for-2 from 40-for-40).
+function deriveWeeklyStats(groupedRows) {
+  const byWeek = new Map();
+  for (const row of groupedRows) {
+    const date = parseDate(row.date.toISOString().slice(0, 10));
+    const mondayOffset = (date.getUTCDay() + 6) % 7; // 0=Mon .. 6=Sun
+    const weekStart = toDateString(addDays(date, -mondayOffset));
+    const week = byWeek.get(weekStart) || { weekStart, reviewed: 0, skipped: 0 };
+    if (row.result === 'REVIEWED') week.reviewed += row._count;
+    else week.skipped += row._count;
+    byWeek.set(weekStart, week);
+  }
+  return [...byWeek.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+}
+
+// All-time, like getCurrentStreak -- a stats dashboard that reset every
+// January 1st would be wrong for the same reason a streak would be.
+async function getWeeklyStats(userId) {
+  const grouped = await prisma.review.groupBy({
+    by: ['date', 'result'],
+    where: { item: { userId, deletedAt: null } },
+    _count: true,
+  });
+  return deriveWeeklyStats(grouped);
+}
+
+async function getItemCountsByMode(userId) {
+  const rows = await prisma.item.groupBy({
+    by: ['mode'],
+    where: { userId, deletedAt: null },
+    _count: true,
+  });
+  const counts = { FIXED: 0, ADAPTIVE: 0 };
+  for (const row of rows) counts[row.mode] = row._count;
+  return counts;
+}
+
+// Grades are the one Adaptive-only number that means exactly what it says --
+// no denominator problem, no age confound (unlike a reviewed/skipped split
+// by mode would have, since Fixed items in this dataset are always older
+// than Adaptive ones). Fixed reviews have no grade at all, so there's no
+// honest way to put them on the same axis -- this stays Adaptive-only.
+async function getAdaptiveGradeDistribution(userId) {
+  const rows = await prisma.review.groupBy({
+    by: ['grade'],
+    where: { item: { userId, deletedAt: null, mode: 'ADAPTIVE' }, grade: { not: null } },
+    _count: true,
+  });
+  const counts = { AGAIN: 0, HARD: 0, GOOD: 0, EASY: 0 };
+  for (const row of rows) counts[row.grade] = row._count;
+  return counts;
+}
+
+async function getStats(userId) {
+  const [weekly, itemsByMode, adaptiveGrades] = await Promise.all([
+    getWeeklyStats(userId),
+    getItemCountsByMode(userId),
+    getAdaptiveGradeDistribution(userId),
+  ]);
+  return { weekly, itemsByMode, adaptiveGrades };
+}
+
 module.exports = {
   createItem,
   listItems,
@@ -240,4 +307,6 @@ module.exports = {
   deriveReviewHistory,
   getCurrentStreak,
   deriveStreak,
+  deriveWeeklyStats,
+  getStats,
 };

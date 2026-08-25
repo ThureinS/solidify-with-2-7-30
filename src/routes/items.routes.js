@@ -33,6 +33,7 @@ function buildItemsRouter(identifyUser) {
   // Must come before '/:id' -- otherwise Express would match "due"/"review-history" as an :id.
   router.get('/due', validate(dueQuerySchema, 'query'), controller.listDue);
   router.get('/review-history', validate(reviewHistoryQuerySchema, 'query'), controller.reviewHistory);
+  router.get('/stats', controller.getStats);
 
   router.get('/:id', controller.getItem);
   router.patch('/:id', validate(updateItemSchema), controller.updateItem);

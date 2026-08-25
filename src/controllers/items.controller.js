@@ -121,6 +121,14 @@ async function switchMode(req, res, next) {
   }
 }
 
+async function getStats(req, res, next) {
+  try {
+    res.json(await itemsService.getStats(req.userId));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function reviewHistory(req, res, next) {
   try {
     const { year: queryYear, date } = req.validatedQuery;
@@ -148,5 +156,6 @@ module.exports = {
   skipItem,
   resetItem,
   switchMode,
+  getStats,
   reviewHistory,
 };

@@ -285,6 +285,19 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/ItemDetail' }
 
+  /items/stats:
+    get:
+      summary: Aggregate stats for the stats dashboard -- weekly review/skip counts, item counts by mode, and Adaptive grade distribution
+      responses:
+        '200':
+          description: Dashboard stats
+          content:
+            application/json:
+              example:
+                weekly: [{ weekStart: '2026-08-17', reviewed: 12, skipped: 3 }]
+                itemsByMode: { FIXED: 8, ADAPTIVE: 3 }
+                adaptiveGrades: { AGAIN: 1, HARD: 2, GOOD: 5, EASY: 1 }
+
   /items/{id}:
     parameters:
       - $ref: '#/components/parameters/ItemId'

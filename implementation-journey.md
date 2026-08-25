@@ -3196,3 +3196,144 @@ self-contained change.
 3. Why does `simulateAdaptiveItem` run its grade sequence from a fixed
    nominal date and shift the result afterward, instead of simulating
    forward starting from "3 days ago" directly?
+
+## Production pivot, step 4: stats dashboard, and the demo page it was missing (2026-08-25)
+
+Step 4 of the pivot: a real stats dashboard (`GET /items/stats`, a new
+`/stats` page) with three charts, plus the `/demo` frontend page that step 3
+deliberately left out (folded in here since it's small and the stats
+dashboard is exactly what makes the showcase page worth visiting). ADR 0003
+governed every chart decision below, the same as steps 2 and 3: nothing on
+this page is allowed to claim more than the stored data actually supports.
+
+**The naming problem, caught before writing the endpoint.** The brief for
+this step was "retention over time, Fixed vs. Adaptive comparison" — but
+`Dashboard.jsx` already has a standing rule (its own comment, from an
+earlier audit) that reviewed/(reviewed+skipped) is *not* a completion or
+retention rate, because it has no idea how many items were actually due —
+review 2 items and skip nothing, and it reads 100%, identical to reviewing
+40. Charting that same fraction *over time* would make it worse, not
+better: a line chart invites reading its slope as "getting better at
+this," which the data can't support without a real denominator (items due
+per week, which isn't stored). The fix: chart raw counts instead of a
+ratio. "12 reviewed, 3 skipped this week" is a true, complete claim; a
+percentage built from it wouldn't be.
+
+**Fixed vs. Adaptive hit the same trap from a different angle.** Splitting
+the reviewed/skipped ratio by mode looked like the obvious comparison, but
+it has a confound on top of the denominator problem: in this seeded data,
+every Adaptive item is brand new (created today) while Fixed items have 90
+days of history, so any difference in their ratios would really be
+measuring item age, not mode. The honest version ended up narrower: **item
+counts by mode** (a fact, not a rate) and, Adaptive-only, **grade
+distribution** (Again/Hard/Good/Easy counts — these mean exactly what they
+say, since a grade is recorded per review with no denominator problem at
+all). Fixed reviews have no grade, so they're just not part of that count
+rather than being forced onto an axis that doesn't fit them.
+
+**Where the three numbers come from.** All three live in
+`items.service.js`, next to `getReviewHistory`/`getCurrentStreak` since
+they're the same kind of thing (a `Review`/`Item` aggregation query plus a
+pure function that shapes the result):
+- `deriveWeeklyStats` (pure) buckets `Review.groupBy([date, result])` rows
+  into ISO weeks (Monday-anchored) and sums REVIEWED/SKIPPED counts
+  separately — no division anywhere in it.
+- `getItemCountsByMode` groups `Item` by `mode`.
+- `getAdaptiveGradeDistribution` groups `Review` by `grade`, filtered to
+  `mode: 'ADAPTIVE'` and `grade: { not: null }`.
+
+`getStats` runs all three with `Promise.all` and returns
+`{ weekly, itemsByMode, adaptiveGrades }` from one new endpoint,
+`GET /items/stats` — added above `/:id` in the route list (the same
+"named routes must come before the `:id` wildcard" rule `/due` and
+`/review-history` already follow, or Express would try to look up an item
+literally named `stats`). No query params: unlike the due-items and curve
+endpoints, nothing here depends on "today," so there's no client-provided
+date to thread through.
+
+**Reused the route factory from step 3 for free.** Because `/items/stats`
+was added to `buildItemsRouter` (the same function that builds both the
+real `/api/v1/items` router and the demo one), it's automatically
+available at `/api/v1/demo/items/stats` too, serving the fixed seeded
+account, with `blockDemoWrites` already covering it (it's a GET, so
+nothing to block, but the point is it needed zero new demo-specific code).
+
+**The frontend: one chart component, two pages.** `StatsPanel.jsx` renders
+all three pieces of `GET /items/stats`'s response and takes only `stats` as
+a prop — no token, no fetching — so both `StatsPage.jsx` (authenticated,
+fetches with `getStats(token)`) and the new `DemoPage.jsx` (public, fetches
+with `getDemoStats()`, no token at all) render the identical component
+unchanged. The weekly chart reuses `@nivo/line` (already pulled in for
+step 2's retrievability curve) as two series, Reviewed and Skipped, instead
+of installing `@nivo/bar` for a chart that's really just showing two counts
+per week. The mode-count and grade-distribution "charts" are four numbers
+each, at most — those are a small plain-CSS bar component (width as a
+percentage of the max value), not a second charting library. The
+`NIVO_THEME` object (reading the Almanac design tokens as CSS custom
+properties, so charts re-theme for free on the dark/light toggle) moved out
+of `RetrievabilityCurve.jsx` into its own `nivoTheme.js` once a second
+component needed the exact same theme — not before.
+
+**The demo page, closing step 3's deliberate gap.** `DemoPage.jsx` is a
+public route (`/demo`, reachable whether or not the visitor is logged in —
+`App.jsx` now renders it outside the login gate instead of inside it) that
+shows the demo account's due-today list (read-only, no Review/Skip buttons
+at all — the read-only-ness is enforced by the backend regardless, but the
+UI shouldn't offer an action it knows will 403) plus the same `StatsPanel`.
+It isn't in the main nav — ADR 0004 frames this as a link shared outside
+the app (with the supervisor), not something a logged-in user needs to
+stumble into.
+
+**Verified with:** a new pure-function test file
+(`tests/weeklyStats.test.js`, 5 cases covering the actual risk in this
+logic — week-boundary bucketing, specifically that a Sunday and the Monday
+right before it land in *different* weeks while a Sunday and its own week's
+Monday land in the *same* one) — full suite now 63 tests, all passing. Then
+a live end-to-end pass with `supertest` against the real Express app and
+the freshly re-seeded local Postgres: a brand-new user's stats correctly
+come back all-zeroes/empty rather than erroring; `stats-test@example.com`'s
+authenticated `/items/stats` and the public `/demo/items/stats` return
+byte-identical JSON (proving the demo mount really does serve the same
+account's real data); the demo due-list still returns 5 items with no
+Authorization header; and a write attempt against `/demo/items` still 403s
+`DEMO_READ_ONLY` (the new route added nothing that could weaken that
+guarantee). In the browser: both `/stats` (logged in) and `/demo` render
+all three charts against real data, verified via the accessibility tree
+and direct DOM inspection rather than screenshots — the sandboxed preview
+browser's screenshot capture was unreliable this session (a stale/zero-size
+viewport after a `resize_window` call, unrelated to the app), so
+`read_page`/`get_page_text`/computed-style checks did the verification
+work instead, with one clean screenshot captured after the viewport
+recovered to confirm the visual result matched.
+
+**New concepts**
+
+- **Counts vs. rates as an honesty axis**: a raw count ("12 reviewed this
+  week") can only under-claim; a rate built from the same numbers
+  ("80% reviewed") claims a denominator, and if that denominator isn't
+  real, the rate is a stronger claim than the data supports even though
+  the underlying numbers are the same. This is ADR 0003 applied to a
+  specific arithmetic operation, not just to whether a number is mocked.
+- **Confounding variable**: a difference between two groups that looks like
+  it's caused by the thing you're comparing (mode) but is actually caused
+  by something else both groups differ on anyway (item age, here) — the
+  reason the Fixed vs. Adaptive reviewed/skipped split was rejected even
+  though nothing about it was fabricated.
+- **ResizeObserver-based responsive sizing**: how `@nivo/line`'s
+  `ResponsiveLine` decides how big to draw itself — it measures its parent
+  container's actual pixel size at render time rather than taking a fixed
+  width/height prop, which is why a container with a genuinely zero-size
+  ancestor (this session's flaky preview viewport) renders nothing, even
+  though the exact same component and data render correctly once the
+  container has real dimensions.
+
+**You should be able to explain**
+
+1. Why does the weekly chart plot raw reviewed/skipped counts instead of a
+   percentage, when a percentage would fit on one line and "12 reviewed, 3
+   skipped" takes two numbers to say?
+2. Why was "reviewed vs. skipped, split by Fixed and Adaptive" rejected as
+   a comparison, when neither number involved is fake?
+3. `StatsPanel` takes only a `stats` object as a prop — no token. What
+   does that buy `DemoPage.jsx` specifically, compared to if it took a
+   token and fetched internally?

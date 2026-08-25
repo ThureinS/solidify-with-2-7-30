@@ -1,24 +1,5 @@
 import { ResponsiveLine } from '@nivo/line';
-
-// Reads the Almanac design tokens (src/index.css) as CSS custom properties,
-// so the chart re-themes for free when the dark/light toggle flips them --
-// no separate light/dark chart config to keep in sync.
-const NIVO_THEME = {
-  text: { fill: 'var(--color-almanac-mute)', fontFamily: 'var(--font-body)', fontSize: 11 },
-  axis: {
-    ticks: { text: { fill: 'var(--color-almanac-mute)' } },
-    legend: { text: { fill: 'var(--color-almanac-mute)' } },
-  },
-  grid: { line: { stroke: 'var(--color-almanac-border)' } },
-  crosshair: { line: { stroke: 'var(--color-almanac-accent)' } },
-  tooltip: {
-    container: {
-      background: 'var(--color-almanac-panel)',
-      color: 'var(--color-almanac-ink)',
-      border: '1px solid var(--color-almanac-border)',
-    },
-  },
-};
+import { NIVO_THEME } from './nivoTheme';
 
 // curve is { points: [{day, retrievability}], today?: {day, retrievability} }
 // from GET /items/:id/curve -- the item's own real Difficulty/Stability run

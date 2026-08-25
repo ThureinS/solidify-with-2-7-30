@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AuthForm from './AuthForm';
 import Dashboard from './Dashboard';
 import ReviewHistoryPage from './ReviewHistoryPage';
+import StatsPage from './StatsPage';
+import DemoPage from './DemoPage';
 import AlmanacShell from './AlmanacShell';
 import {
   getMe,
@@ -80,10 +82,15 @@ function App() {
     };
   }, [token]);
 
+  // /demo (ADR 0004) is reachable either way: a link shared outside the app
+  // shouldn't depend on whether the visitor happens to be logged in.
   if (!token) {
     return (
       <AlmanacShell onToggleMode={toggleMode} loggedIn={false}>
-        <AuthForm onLoggedIn={handleLoggedIn} />
+        <Routes>
+          <Route path="/demo" element={<DemoPage />} />
+          <Route path="*" element={<AuthForm onLoggedIn={handleLoggedIn} />} />
+        </Routes>
       </AlmanacShell>
     );
   }
@@ -96,6 +103,8 @@ function App() {
           element={<Dashboard token={token} user={user} onTokenRefresh={handleLoggedIn} />}
         />
         <Route path="/history" element={<ReviewHistoryPage token={token} />} />
+        <Route path="/stats" element={<StatsPage token={token} />} />
+        <Route path="/demo" element={<DemoPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AlmanacShell>
