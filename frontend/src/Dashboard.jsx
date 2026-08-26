@@ -163,7 +163,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
       await createItem(token, newText, newItemMode);
       setNewText('');
       setAddedMessage(
-        newItemMode === 'ADAPTIVE' ? 'Added -- due today for its first graded review.' : 'Added -- first review is due in 2 days.',
+        newItemMode === 'ADAPTIVE' ? 'Added — due today for its first graded review.' : 'Added — first review is due in 2 days.',
       );
       // Fixed items are never due same-day, so this refresh used to be a
       // no-op in practice -- Adaptive items are due immediately, so without

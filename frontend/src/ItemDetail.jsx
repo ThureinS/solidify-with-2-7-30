@@ -66,7 +66,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
   // both wipe the item's schedule state back to a start-of-life state and
   // return the updated item; review history is untouched by either.
   async function handleReset() {
-    if (!window.confirm('Reset this item? Its schedule starts over from day one -- review history stays.')) return;
+    if (!window.confirm('Reset this item? Its schedule starts over from day one — review history stays.')) return;
     setError('');
     try {
       const updated = await resetItem(token, itemId);
@@ -81,7 +81,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
     const nextMode = item.mode === 'ADAPTIVE' ? 'FIXED' : 'ADAPTIVE';
     if (
       !window.confirm(
-        `Switch to ${nextMode === 'ADAPTIVE' ? 'Adaptive' : 'Fixed'} mode? Its schedule starts over from day one -- review history stays.`,
+        `Switch to ${nextMode === 'ADAPTIVE' ? 'Adaptive' : 'Fixed'} mode? Its schedule starts over from day one — review history stays.`,
       )
     )
       return;
@@ -240,7 +240,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
         <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6">
           <h2 className="font-display text-base font-medium mb-1">Start over</h2>
           <p className="text-xs text-almanac-mute mb-4">
-            Both wipe this item's schedule back to day one -- review history stays either way.
+            Both wipe this item's schedule back to day one &mdash; review history stays either way.
           </p>
           <div className="flex gap-2.5">
             <button

@@ -225,6 +225,13 @@ sending a fake date — fine for a personal tool.
 > the old wordmark described the palette rather than the product. The tokens
 > were deliberately *not* renamed — they're internal, and touching every
 > `className` in every component buys nothing a user can see.
+>
+> **Renamed again, 2026-08-26: the product is now called Interval**, and the
+> visual palette itself changed too (new colors, new fonts — see
+> `implementation-journey.md`'s "step 5" entry). The `almanac-*` token
+> *names* and `AlmanacShell.jsx`'s filename are still deliberately unchanged,
+> same reasoning as above — only the tokens' *values* and the visible
+> wordmark/tagline/title moved.
 
 A full frontend visual + UX revamp was scoped and design-explored in a
 dedicated session (see `implementation-journey.md`, 2026-07-25 entries, for

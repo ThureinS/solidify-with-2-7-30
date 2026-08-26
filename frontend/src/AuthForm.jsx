@@ -43,7 +43,7 @@ export default function AuthForm({ onLoggedIn }) {
               a first-time visitor is told what the app actually does. */}
           <h1 className="font-display text-3xl font-medium tracking-wide">Interval</h1>
           <p className="text-sm text-almanac-mute leading-relaxed">
-            Write what you learned. Interval brings it back -- on a fixed schedule, or one that adapts to you.
+            Write down what you learned, then come back to review it &mdash; on a fixed schedule, or one that adapts to you.
           </p>
         </div>
 
