@@ -118,11 +118,11 @@ export function logout(refreshToken) {
   return request('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken }) });
 }
 
-export function createItem(token, text) {
+export function createItem(token, text, mode) {
   return request('/items', {
     token,
     method: 'POST',
-    body: JSON.stringify({ text, date: todayLocal() }),
+    body: JSON.stringify({ text, date: todayLocal(), mode }),
   });
 }
 
@@ -156,6 +156,28 @@ export function updateItem(token, itemId, text) {
 // Soft delete on the backend; returns 204 -> request() resolves to null.
 export function deleteItem(token, itemId) {
   return request(`/items/${itemId}`, { token, method: 'DELETE' });
+}
+
+// Wipes progress back to the item's own mode's start-of-life state (review
+// history stays -- only stage/stability reset). finalIntervalDays is never
+// sent: the create form doesn't expose it, so there's nothing to carry.
+export function resetItem(token, itemId) {
+  return request(`/items/${itemId}/reset`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ date: todayLocal() }),
+  });
+}
+
+// Always a full reset onto the *new* mode's start-of-life state (CONTEXT.md
+// -- never a converted carry-over). Same finalIntervalDays omission as
+// resetItem: switching to Fixed keeps whatever the item already had.
+export function switchItemMode(token, itemId, mode) {
+  return request(`/items/${itemId}/mode`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ mode, date: todayLocal() }),
+  });
 }
 
 // grade is only meaningful (and only accepted) for Adaptive items -- Fixed

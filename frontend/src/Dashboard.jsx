@@ -38,10 +38,17 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
+function modePillClass(active) {
+  return active
+    ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg cursor-pointer'
+    : 'px-3.5 py-1.5 rounded-full text-xs text-almanac-mute cursor-pointer';
+}
+
 export default function Dashboard({ token, user, onTokenRefresh }) {
   const [view, setView] = useState('due'); // 'due' | 'all' | 'admin' | 'account'
   const [dueItems, setDueItems] = useState([]);
   const [newText, setNewText] = useState('');
+  const [newItemMode, setNewItemMode] = useState('FIXED');
   const [error, setError] = useState('');
   const [addedMessage, setAddedMessage] = useState('');
 
@@ -153,9 +160,16 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     setError('');
     setAddedMessage('');
     try {
-      await createItem(token, newText);
+      await createItem(token, newText, newItemMode);
       setNewText('');
-      setAddedMessage('Added -- first review is due in 2 days.');
+      setAddedMessage(
+        newItemMode === 'ADAPTIVE' ? 'Added -- due today for its first graded review.' : 'Added -- first review is due in 2 days.',
+      );
+      // Fixed items are never due same-day, so this refresh used to be a
+      // no-op in practice -- Adaptive items are due immediately, so without
+      // it a brand-new Adaptive item wouldn't show up until something else
+      // (a review, a tab switch) happened to refetch the due list.
+      await refreshDueItems();
     } catch (err) {
       setError(err.message);
     }
@@ -305,9 +319,17 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
               required
               className="flex-1 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
             />
+            <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
+              <button type="button" onClick={() => setNewItemMode('FIXED')} className={modePillClass(newItemMode === 'FIXED')}>
+                Fixed
+              </button>
+              <button type="button" onClick={() => setNewItemMode('ADAPTIVE')} className={modePillClass(newItemMode === 'ADAPTIVE')}>
+                Adaptive
+              </button>
+            </div>
             <button
               type="submit"
-              className="rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer flex-shrink-0"
             >
               Add item
             </button>

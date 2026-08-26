@@ -3337,3 +3337,150 @@ recovered to confirm the visual result matched.
 3. `StatsPanel` takes only a `stats` object as a prop — no token. What
    does that buy `DemoPage.jsx` specifically, compared to if it took a
    token and fetched internally?
+
+## Production pivot, step 5 (final): rebrand to Interval + Adaptive create/mode-switch UI (2026-08-26)
+
+The last step of the pivot: the visible rename from `2-7-30`/Almanac to
+**Interval**, a real visual rebrand (new palette, new fonts — not just a
+wordmark swap), and the Adaptive create/mode-switch UI gap flagged since
+step 1 (no frontend way to create an item as Adaptive, or switch an
+existing item's mode, even though the backend has supported both since
+step 1). Folded together on purpose, so the new UI is designed once in the
+final look instead of built in the old Almanac style and re-touched here.
+
+**The design process was different this time.** The original Almanac pass
+(§10 in `developer-handover.md`) compared whole directions as static HTML
+mockups shown as Artifacts. This step used the real `design` skill instead
+— Claude Design's canvas editor, published as one Artifact with named
+pages the user could pan between. Three full directions were drafted
+(palette + login + dashboard + item-detail mockups each): **Instrument**
+(cool teal, hairline borders, geometric sans — "calibrated equipment"),
+**Ledger** (warm amber, serif headings — "a logbook for what you
+learned"), and **Signal** (near-black, monospace, glowing green curve —
+"an oscilloscope readout"). All three leaned into "Interval" being literal
+— the value the scheduler actually computes — rather than anything
+decorative, the same complaint that got the old Almanac name rejected in
+the first place (§10c: it named a palette, not the product). The user
+picked a fourth combination not on the original board — Instrument's
+palette with Signal's monospace typography — so a fourth page was drafted
+and added to the same canvas before any real code changed, confirming the
+mix looked right before committing to it across a dozen files.
+
+**Token values changed; token names didn't — asked directly, not assumed.**
+The original 8-01 rename kept the `almanac-*` CSS variable names and only
+touched three visible strings, on the reasoning that renaming variables
+touches every className for zero user-visible gain. Since this step is a
+bigger change (the whole palette and both fonts, not just a name), that
+precedent was worth re-confirming rather than silently assuming it still
+held — asked directly, and the answer was to keep it, deferring any
+`almanac-*` → `interval-*` rename to later, after this step is built and
+tested. Practical reason it matters more now, not less: `nivoTheme.js`
+reads these tokens as literal `var(--color-almanac-*)` strings for the
+chart library — a rename that missed that file would silently produce
+`undefined` chart colors instead of a build error.
+
+**Three Adaptive-UI sub-decisions, each asked rather than defaulted:**
+- **No `finalIntervalDays` at item creation.** `STAGE_LABELS` is hardcoded
+  as `['2-day review', '7-day review', '30-day review']` in both
+  `Dashboard.jsx` and `ItemDetail.jsx` — exposing a custom final interval
+  at creation would make the "30-day" label false for any item that isn't
+  30, the exact "a label claiming more than the data supports" mistake
+  ADR 0003 exists to catch. `finalIntervalDays` stays reachable later
+  through the mode-switch call (the backend already accepts it there);
+  the create form only ever sends `mode`.
+- **Mode picker is an inline segmented pill, not a collapsed "Advanced"
+  toggle**, reusing `AuthForm.jsx`'s existing Login/Register pill pattern
+  and defaulting to Fixed. A collapsed section would have left mixed-mode
+  barely more discoverable than the zero UI that existed before this step.
+- **Reset and Switch mode are two separate buttons**, not one combined
+  control — this was the one place the user picked against the
+  recommendation. CONTEXT.md and the backend both treat them as literally
+  the same operation (wipe to start-of-life state; picking the item's
+  current mode as a "switch" target would just be a reset), which argued
+  for one control that mirrors that identity. The user chose the more
+  explicit two-button version instead, so `ItemDetail.jsx` has a `Reset`
+  button and a `Switch to {other mode}` button, each with its own
+  `window.confirm()`, both calling the same underlying pair of `api.js`
+  functions (`resetItem`, `switchItemMode`) either way.
+
+**A real bug the Adaptive create option exposed, not introduced.**
+`Dashboard.jsx`'s `handleAddItem` never refreshed the due-items list after
+creating an item — invisible until now, because a Fixed item is never due
+the same day it's created (`+2` days), so there was nothing to refresh
+into view. An Adaptive item is due *today* (step 1's decision), so without
+a fix, a brand-new Adaptive item silently wouldn't show up in "Due today"
+until something else happened to refetch it (a review, a tab switch).
+Caught by watching the live browser test, not by reading the diff — the
+add-item flow reported "Added" but the due count didn't move. Fixed with
+one added `await refreshDueItems()` call.
+
+**Scope of the rename itself**, following the 8-01 precedent's actual
+principle (fix strings that are genuinely stale, not everything matching a
+substring): `AlmanacShell.jsx`'s wordmark, `AuthForm.jsx`'s heading *and*
+tagline (the old tagline only described Fixed Mode's ladder, which stopped
+being the whole story once Adaptive Mode shipped — rewritten rather than
+just swapped), `frontend/index.html`'s `<title>`, and `user-manual.md`'s
+title line and one framing sentence (it names the product, same as the
+wordmark does — the body's repeated "2-7-30" *schedule* references were
+left alone, since that's still the literal name of the Fixed Mode ladder,
+a real technical term from CONTEXT.md, not the product name). Checked
+every other `2-7-30` hit in the repo first (`README.md`, `openapi.yaml`,
+`CONTEXT.md`, `worker.js`, `package.json`, `developer-handover.md`) before
+touching anything — most describe the *algorithm*, which is still
+accurate, or are the load-bearing GitHub/Vercel slug, which stays
+unchanged again this time for the same reason as 8-01. `lining-nums` (the
+old fix for the display serif's old-style-figure `0`, needed because the
+wordmark used to be digits) was removed along with its now-stale comments
+— "Interval" has no digits, so the class was dead weight, not a decision.
+
+**Verified with:** the full 63-test Vitest suite (unchanged — this step
+touched no backend logic, only new thin `api.js` wrappers around
+already-tested `POST /items/:id/reset` and `POST /items/:id/mode`), a
+live browser pass against a freshly seeded local Postgres (logged in as
+`demo@example.com`, created a Fixed and an Adaptive item through the new
+form, graded the Adaptive item `Good` and confirmed a real
+`stability: 2.3d` came back, opened its detail page and watched the real
+memory-decay curve render in the new teal — re-themed for free through
+the same CSS-custom-property bridge step 2 built, no chart code touched),
+and Stats/Demo/light-mode checked visually. One gap: the sandboxed test
+browser suppresses native `confirm()` dialogs (returns `false`
+automatically), so Reset/Switch mode's "confirmed" path couldn't be driven
+end-to-end through the UI — verified instead with direct authenticated
+`curl` calls against the running dev server, confirming both endpoints
+return the same mode-aware item shape `ItemDetail.jsx` already knows how
+to render (proven by the earlier `getItem`/`updateItem` calls rendering
+correctly), same reasoning as trusting `deleteItem`'s existing
+`window.confirm()` pattern that this step's buttons copy exactly.
+
+**New concepts**
+
+- **Design canvas exploration**: Claude Design's canvas editor, an
+  early-preview tool that publishes multiple named, pannable "pages" (each
+  a full mockup) as one Artifact, used here instead of the older
+  compare-several-static-HTML-files process the original Almanac pass
+  used — same underlying goal (settle a direction before writing real
+  code), different mechanism.
+- **CSS custom properties as a theming bridge** (reconfirmed from step 2,
+  now proven a second time): because the Nivo chart reads
+  `var(--color-almanac-accent)` etc. directly rather than a hardcoded hex,
+  swapping every token's *value* in one file (`index.css`) re-themed the
+  already-built retrievability curve with zero changes to
+  `RetrievabilityCurve.jsx` or `nivoTheme.js`.
+- **A precedent revisited, not just repeated**: the 8-01 rename's "keep
+  internal names, change only visible strings" rule was treated as a
+  hypothesis to re-test against a bigger change, not a rule to blindly
+  reapply — re-confirmed explicitly, with a concrete new reason
+  (`nivoTheme.js`'s literal token-name dependency) that didn't exist the
+  first time this decision was made.
+
+**You should be able to explain**
+
+1. Why did exposing an Adaptive create option turn "the add-item form
+   doesn't refresh the due list" from a harmless gap into an actual bug,
+   when the code that was missing didn't change?
+2. `finalIntervalDays` isn't on the create form, but it's still reachable
+   through the mode-switch call. Why does that split make sense, instead
+   of just leaving it unreachable everywhere?
+3. Why did `nivoTheme.js` end up being a reason to keep the `almanac-*`
+   token names during a full palette rebrand, when the file has nothing
+   to do with color names as text?

@@ -9,46 +9,54 @@
 @import 'tailwindcss/theme' layer(theme);
 @import 'tailwindcss/utilities' layer(utilities);
 
-/* Almanac design tokens (see design/review-history-demo.html) -- available
-   as Tailwind utilities (bg-almanac-bg, text-almanac-ink, font-display...)
-   for the new history page. Dark is the default; :root[data-mode="light"]
-   (set by the page's own toggle) and the OS-level light preference both
-   override it, same as the approved reference file. */
-@theme {
-  --color-almanac-bg: #1b1f3b;
-  --color-almanac-panel: #20244a;
-  --color-almanac-ink: #efe7d0;
-  --color-almanac-mute: #9aa3c9;
-  --color-almanac-accent: #e8c468;
-  --color-almanac-border: #2e3460;
-  --color-almanac-moon-dark: #262b52;
-  --color-almanac-danger: #d9776a;
+/* Design tokens -- available as Tailwind utilities (bg-almanac-bg,
+   text-almanac-ink, font-display...) across every screen. Names kept as
+   almanac-* on purpose (see developer-handover.md): renaming them would
+   touch every className in every component, plus nivoTheme.js reads them
+   as literal var(--color-almanac-*) strings, for zero user-visible gain --
+   only the VALUES changed for the Interval rebrand (2026-08-26). Dark is
+   the default; :root[data-mode="light"] (set by the page's own toggle) and
+   the OS-level light preference both override it.
 
-  --font-display: 'Big Caslon', Didot, Georgia, serif;
-  --font-body: Optima, Futura, ui-sans-serif, sans-serif;
+   Direction: "Instrument" palette (cool, hairline-bordered, one confident
+   teal) with "Signal"'s monospace display font -- headings and data
+   readouts (stage/stability/date lines) read like a calibrated
+   instrument's own readout, chosen from a 3-direction canvas comparison. */
+@theme {
+  --color-almanac-bg: #10161a;
+  --color-almanac-panel: #171f24;
+  --color-almanac-ink: #e7eff1;
+  --color-almanac-mute: #7e8e93;
+  --color-almanac-accent: #4fd1c5;
+  --color-almanac-border: #253038;
+  --color-almanac-moon-dark: #1d262b;
+  --color-almanac-danger: #e2635a;
+
+  --font-display: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  --font-body: -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 :root[data-mode='light'] {
-  --color-almanac-bg: #eef1fa;
+  --color-almanac-bg: #f4f7f8;
   --color-almanac-panel: #ffffff;
-  --color-almanac-ink: #1b1f3b;
-  --color-almanac-mute: #5b6390;
-  --color-almanac-accent: #b8860f;
-  --color-almanac-border: #d8dcee;
-  --color-almanac-moon-dark: #d6dcf0;
-  --color-almanac-danger: #b8412f;
+  --color-almanac-ink: #10171a;
+  --color-almanac-mute: #5b6a6e;
+  --color-almanac-accent: #0e8e82;
+  --color-almanac-border: #dce4e4;
+  --color-almanac-moon-dark: #e7ecec;
+  --color-almanac-danger: #c2453b;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-mode]) {
-    --color-almanac-bg: #eef1fa;
+    --color-almanac-bg: #f4f7f8;
     --color-almanac-panel: #ffffff;
-    --color-almanac-ink: #1b1f3b;
-    --color-almanac-mute: #5b6390;
-    --color-almanac-accent: #b8860f;
-    --color-almanac-border: #d8dcee;
-    --color-almanac-moon-dark: #d6dcf0;
-    --color-almanac-danger: #b8412f;
+    --color-almanac-ink: #10171a;
+    --color-almanac-mute: #5b6a6e;
+    --color-almanac-accent: #0e8e82;
+    --color-almanac-border: #dce4e4;
+    --color-almanac-moon-dark: #e7ecec;
+    --color-almanac-danger: #c2453b;
   }
 }
 

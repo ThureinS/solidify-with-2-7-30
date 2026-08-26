@@ -1,9 +1,10 @@
-# User Manual — 2-7-30
+# User Manual — Interval
 
 A simple guide to using the app. No technical background needed.
 
-The app is named after the schedule it runs on. That's the whole idea, so it
-seemed like the honest thing to call it.
+The app is named after the number the scheduler actually hands you: the
+interval until your next review, whichever mode gets you there. That's the
+whole idea, so it seemed like the honest thing to call it.
 
 ## What this app does
 
