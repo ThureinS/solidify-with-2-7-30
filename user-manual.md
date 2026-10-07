@@ -52,10 +52,17 @@ days until it's due." If it's showing up in this list, it's due *now*.
 Each item shows:
 - The full text of what you wrote
 - Which review stage it's on (2-day / 7-day / 30-day)
+- **Overdue by N days**, in red, if its due date has already passed
 - **Review** and **Skip** buttons
 
-Click anywhere on an item's text (not the buttons) to open its detail view —
-you'll see the exact dates and its full review history there.
+Click anywhere on an item (except the buttons) to open its detail view —
+you'll see the exact dates and its full review history there. Each item has
+its own web address, so the browser's Back button, refreshing the page, and
+sharing the link all work. Back takes you to the same tab you came from.
+
+If the list is empty, the app tells you why. A brand-new account sees a short
+note on what to do first. If you have items but none are due, it says you're
+done for today.
 
 ### Review vs. Skip
 
@@ -72,7 +79,8 @@ though, and you'll see it on the History page — see below.
 
 ### The numbers along the top
 
-Under the "Due today" heading is a line of statistics. They're worth reading
+Under the "Due today" heading is a line of statistics (shown on the Due today
+tab only, together with the Daily goal box). They're worth reading
 carefully, because each one answers a *different* question:
 
 - **"4 left today"** — how many items are still waiting. Reviewing or
@@ -145,7 +153,9 @@ Browse everything you've ever added, with a filter:
 - **Archived** — items that finished all three reviews
 - **All** — both
 
-Click any item to open its detail view, where you can:
+Click any item to open its detail view. Its review history lists every review
+and skip by date; for Adaptive items, each review also shows the grade you
+gave (Again, Hard, Good or Easy). In the detail view you can:
 - **Edit** the text (this does *not* reset or change its schedule — only the
   words change)
 - **Delete** it (this is a *soft* delete — it disappears from your lists but
@@ -201,6 +211,11 @@ Only in the sense that a skip is recorded as a skip: it shows as a half moon
 for that day and counts against your reviewed-rather-than-skipped share. It
 does not lose your progress, break your streak, or change which review stage
 an item is on.
+
+**Why are all the buttons greyed out?**
+You're logged in to the demo account. It is read-only: you can look around,
+but you can't add, review, skip, edit or delete anything. A banner at the top
+of the page says so.
 
 **I don't see the Admin tab — why?**
 Only accounts with the admin role see it. Regular accounts don't have access
