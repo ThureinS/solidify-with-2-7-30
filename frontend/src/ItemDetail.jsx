@@ -19,7 +19,12 @@ function overdueLabel(nextReviewDate, today) {
   return `overdue by ${days} day${days === 1 ? '' : 's'}`;
 }
 
-export default function ItemDetail({ token, onChanged }) {
+// Appended to a button's classes so a disabled one (demo account) looks inactive.
+const DISABLED = ' disabled:opacity-40 disabled:cursor-not-allowed';
+
+// readOnly: the demo account. Its writes would get 403 from the server, so
+// the write buttons are disabled instead (see Dashboard's banner).
+export default function ItemDetail({ token, readOnly, onChanged }) {
   const { id: itemId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -200,14 +205,16 @@ export default function ItemDetail({ token, onChanged }) {
                 <button
                   type="button"
                   onClick={startEditing}
-                  className="rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                  disabled={readOnly}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer"
+                  disabled={readOnly}
+                  className={`rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer${DISABLED}`}
                 >
                   Delete
                 </button>
@@ -276,7 +283,8 @@ export default function ItemDetail({ token, onChanged }) {
             <button
               type="button"
               onClick={handleReset}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+              disabled={readOnly}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -287,7 +295,8 @@ export default function ItemDetail({ token, onChanged }) {
             <button
               type="button"
               onClick={handleSwitchMode}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+              disabled={readOnly}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7 7h13l-4-4" />

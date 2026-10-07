@@ -61,13 +61,19 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
+// Appended to a button's classes so a disabled one (demo account) looks inactive.
+const DISABLED = ' disabled:opacity-40 disabled:cursor-not-allowed';
+
 // border-0 and bg-transparent are needed: this app skips Tailwind's reset,
 // so a bare <button> keeps the browser's own 2px border and light-grey
 // background (bright in dark mode, and a second border inside the pill).
 function modePillClass(active) {
-  return active
-    ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer'
-    : 'px-3.5 py-1.5 rounded-full text-xs bg-transparent text-almanac-mute border-0 cursor-pointer hover:text-almanac-ink';
+  return (
+    (active
+      ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer'
+      : 'px-3.5 py-1.5 rounded-full text-xs bg-transparent text-almanac-mute border-0 cursor-pointer hover:text-almanac-ink') +
+    DISABLED
+  );
 }
 
 export default function Dashboard({ token, user, onTokenRefresh }) {
@@ -249,6 +255,10 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
   }
 
   const today = todayLocal();
+  // The public demo account can look but not change anything. The server
+  // already rejects its writes (403 DEMO_READ_ONLY); this just says so up
+  // front and greys the buttons out, instead of an error after a click.
+  const readOnly = !!user?.isDemo;
   const listView = (
     <div className="flex flex-col gap-6">
       <div>
@@ -279,6 +289,13 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
             ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
         </span>
       </div>
+
+      {readOnly && (
+        <p className="m-0 text-sm text-almanac-ink bg-almanac-panel border border-almanac-accent rounded-lg px-4 py-3">
+          This is the demo account. It is read-only: you can look around, but you can&apos;t add, review or change
+          items.
+        </p>
+      )}
 
       {/* Hidden until we know who we are: goalKey needs the real user id, so a
           goal typed while /auth/me is still in flight -- or while it's failing
@@ -334,38 +351,42 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
       {view !== 'admin' && view !== 'account' && (
         <>
           <form onSubmit={handleAddItem} className="flex flex-wrap sm:flex-nowrap gap-2.5">
-            <input
-              type="text"
-              placeholder="What did you learn?"
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              required
-              className="basis-full sm:basis-auto flex-1 min-w-0 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
-            />
-            <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
+            {/* A disabled fieldset disables every control inside it at once.
+                display: contents keeps the form's flex layout as it was. */}
+            <fieldset disabled={readOnly} className="contents">
+              <input
+                type="text"
+                placeholder="What did you learn?"
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                required
+                className={`basis-full sm:basis-auto flex-1 min-w-0 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg${DISABLED}`}
+              />
+              <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  aria-pressed={newItemMode === 'FIXED'}
+                  onClick={() => setNewItemMode('FIXED')}
+                  className={modePillClass(newItemMode === 'FIXED')}
+                >
+                  Fixed
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={newItemMode === 'ADAPTIVE'}
+                  onClick={() => setNewItemMode('ADAPTIVE')}
+                  className={modePillClass(newItemMode === 'ADAPTIVE')}
+                >
+                  Adaptive
+                </button>
+              </div>
               <button
-                type="button"
-                aria-pressed={newItemMode === 'FIXED'}
-                onClick={() => setNewItemMode('FIXED')}
-                className={modePillClass(newItemMode === 'FIXED')}
+                type="submit"
+                className={`rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer flex-shrink-0${DISABLED}`}
               >
-                Fixed
+                Add item
               </button>
-              <button
-                type="button"
-                aria-pressed={newItemMode === 'ADAPTIVE'}
-                onClick={() => setNewItemMode('ADAPTIVE')}
-                className={modePillClass(newItemMode === 'ADAPTIVE')}
-              >
-                Adaptive
-              </button>
-            </div>
-            <button
-              type="submit"
-              className="rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer flex-shrink-0"
-            >
-              Add item
-            </button>
+            </fieldset>
           </form>
           {addedMessage && <p className="text-sm text-almanac-accent">{addedMessage}</p>}
           {error && <p className="text-sm text-almanac-danger">{error}</p>}
@@ -411,7 +432,8 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                         key={grade}
                         type="button"
                         onClick={() => handleReview(item.id, grade)}
-                        className="rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                        disabled={readOnly}
+                        className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                       >
                         {GRADE_LABELS[grade]}
                       </button>
@@ -420,7 +442,8 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                     <button
                       type="button"
                       onClick={() => handleReview(item.id)}
-                      className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                      disabled={readOnly}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                     >
                       Review
                     </button>
@@ -428,7 +451,8 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                   <button
                     type="button"
                     onClick={() => handleSkip(item.id)}
-                    className="rounded-lg px-3 py-1.5 text-xs bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+                    disabled={readOnly}
+                    className={`rounded-lg px-3 py-1.5 text-xs bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
                   >
                     Skip
                   </button>
@@ -523,7 +547,13 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     <Routes>
       <Route
         path="items/:id"
-        element={<ItemDetail token={token} onChanged={view === 'due' ? refreshDueItems : refreshAllItems} />}
+        element={
+          <ItemDetail
+            token={token}
+            readOnly={readOnly}
+            onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
+          />
+        }
       />
       <Route index element={listView} />
       <Route path="*" element={<Navigate to="/" replace />} />
