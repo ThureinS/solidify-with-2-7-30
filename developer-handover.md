@@ -264,7 +264,7 @@ is built (§10a, as of AdminPanel on 2026-07-31), and the one idea from §10b
 worth keeping (the weekly recap) is also built as of 2026-07-31 — **the
 whole Almanac redesign, §10a and §10b both, is now feature-complete.**
 
-**Committed locally, not pushed to `origin/main` yet** — held back so
+*(Historical: pushed 2026-07-31, see §12a.)* **Committed locally, not pushed to `origin/main` yet** — held back so
 production gets one complete visual pass instead of a half-restyled app
 (pushing to `main` auto-deploys both backend and frontend on Vercel, per
 §2/§11). Now that the redesign itself has nothing left to build, deploying
@@ -814,15 +814,21 @@ than 10 s (error 57014), and the API returns the normal 500.
 - **Undo:** `ALTER ROLE neondb_owner RESET statement_timeout;`.
 - **Migrations:** the role setting also limits `prisma migrate deploy`. If a
   large migration fails with error 57014, this limit is the cause.
-- **Still open:** this change isn't deployed yet. After the next push,
-  check `/health`, log in, and load the due items on the live API.
+- **Deployed 2026-10-07** (push `4265039..474a4b2`). `/health` and the
+  due items load on the live API through the `-pooler` URL. The same day's
+  prod reseed also ran the new `src/lib/prisma.js` against that host.
 
 **Redis memory limit.** See §6.
 
-### 12d. Next push: the lane work (2026-10-07)
+### 12d. Push of the lane work (2026-10-07)
 
-`main` holds all lane work (L0, LA, LB, LC, LD, LE, LF) and is not pushed
-yet. There is no new migration and no new environment variable.
+**Pushed and verified live 2026-10-07** (`4265039..474a4b2`): all lane
+work (L0, LA, LB, LC, LD, LE, LF). There was no new migration and no new
+environment variable. The new API was live about 45 s after the push (the
+Fixed-item curve changed from 400 to `{ points: [] }`). Checks 2–5 below
+passed on public routes. The only check left for the user is a real login
+on the live site, since the assistant doesn't type passwords into live
+sites.
 
 **Deploy order matters once.** The frontend and the API are separate
 Vercel projects (§12a), and they can finish deploying at different times.
@@ -834,7 +840,7 @@ Vercel projects (§12a), and they can finish deploying at different times.
 - So after the push, check the API deployment is live before you open a
   Fixed item, or simply wait until both deployments show "Ready".
 
-**Checks after the push** (read-only, on the live site):
+**Checks after the push** (read-only, on the live site; reuse them for the next push):
 1. `/health`, then log in, then load the due items (also closes §12c).
 2. Open `/demo`, `/stats` and `/history` directly (no 404, lane L0).
 3. Open a Fixed item and an Adaptive item: no error; the curve shows only
