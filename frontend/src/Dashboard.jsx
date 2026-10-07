@@ -48,10 +48,13 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
+// border-0 and bg-transparent are needed: this app skips Tailwind's reset,
+// so a bare <button> keeps the browser's own 2px border and light-grey
+// background (bright in dark mode, and a second border inside the pill).
 function modePillClass(active) {
   return active
-    ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg cursor-pointer'
-    : 'px-3.5 py-1.5 rounded-full text-xs text-almanac-mute cursor-pointer';
+    ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer'
+    : 'px-3.5 py-1.5 rounded-full text-xs bg-transparent text-almanac-mute border-0 cursor-pointer hover:text-almanac-ink';
 }
 
 export default function Dashboard({ token, user, onTokenRefresh }) {
@@ -318,10 +321,20 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
               className="basis-full sm:basis-auto flex-1 min-w-0 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
             />
             <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
-              <button type="button" onClick={() => setNewItemMode('FIXED')} className={modePillClass(newItemMode === 'FIXED')}>
+              <button
+                type="button"
+                aria-pressed={newItemMode === 'FIXED'}
+                onClick={() => setNewItemMode('FIXED')}
+                className={modePillClass(newItemMode === 'FIXED')}
+              >
                 Fixed
               </button>
-              <button type="button" onClick={() => setNewItemMode('ADAPTIVE')} className={modePillClass(newItemMode === 'ADAPTIVE')}>
+              <button
+                type="button"
+                aria-pressed={newItemMode === 'ADAPTIVE'}
+                onClick={() => setNewItemMode('ADAPTIVE')}
+                className={modePillClass(newItemMode === 'ADAPTIVE')}
+              >
                 Adaptive
               </button>
             </div>
