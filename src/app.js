@@ -41,7 +41,10 @@ const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim());
-app.use(cors({ origin: allowedOrigins }));
+// maxAge: the browser remembers a passed CORS check (the OPTIONS "preflight"
+// request) for 10 minutes, instead of repeating it before every call.
+// Each preflight is a full round trip to the server (U19).
+app.use(cors({ origin: allowedOrigins, maxAge: 600 }));
 
 app.use(morgan('dev'));
 app.use(express.json({ limit: '64kb' }));

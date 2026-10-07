@@ -539,14 +539,14 @@ paths:
 
   /admin/users/{id}/suspend:
     post:
-      summary: Suspend a user (admin only, cannot suspend self)
+      summary: Suspend a user (admin only, cannot suspend self or the demo account)
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:
         '204':
           description: User suspended
         '403':
-          description: Not an admin, or attempting to suspend yourself
+          description: Not an admin, attempting to suspend yourself (CANNOT_SUSPEND_SELF), or attempting to suspend the demo account (CANNOT_SUSPEND_DEMO)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
