@@ -5,6 +5,7 @@ import RetrievabilityCurve from './RetrievabilityCurve';
 
 // ponytail: duplicated from Dashboard; a shared constants module isn't worth it for one array.
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
+const GRADE_LABELS = { AGAIN: 'Again', HARD: 'Hard', GOOD: 'Good', EASY: 'Easy' };
 
 // "overdue by N days", or '' when not late. Both dates are calendar dates
 // (YYYY-MM-DD); "today" is the client's local date (todayLocal), never the
@@ -254,7 +255,9 @@ export default function ItemDetail({ token, onChanged }) {
                 <div>
                   <div className="text-sm">{review.date}</div>
                   <div className="text-xs text-almanac-mute">
+                    {/* grade is set only for Adaptive reviews; Fixed reviews and skips have null */}
                     {review.result === 'REVIEWED' ? 'Reviewed' : 'Skipped'}
+                    {review.grade && ` · ${GRADE_LABELS[review.grade]}`}
                   </div>
                 </div>
               </li>
