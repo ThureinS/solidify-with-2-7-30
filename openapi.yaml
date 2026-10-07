@@ -15,6 +15,16 @@ info:
     Every `date` field (query or body) is the client's calendar date in
     YYYY-MM-DD form and must be a real date: an impossible one such as
     2026-02-30 is rejected with 400 VALIDATION_ERROR.
+
+    Auth: log in for a short-lived access token (a JWT, 30 minutes) and a
+    refresh token (30 days). Send the access token as `Authorization: Bearer`.
+    When it expires, trade the refresh token at `/auth/refresh` for a new pair.
+
+    Public demo: every `/items` GET path and `/export` also exist under
+    `/demo` (for example `GET /demo/items/due?date=...`) with no token. They
+    always serve the fixed demo account and are read-only: any write answers
+    403 DEMO_READ_ONLY. If that account doesn't exist yet, they answer 503
+    DEMO_NOT_SEEDED.
   version: 1.0.0
 servers:
   - url: /api/v1
@@ -54,6 +64,21 @@ components:
           type: boolean
           description: True only for the public read-only demo account. Its writes return 403 DEMO_READ_ONLY.
 
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string, description: JWT for the Authorization header; expires after 30 minutes }
+        refreshToken: { type: string, description: Opaque token for /auth/refresh and /auth/logout; expires after 30 days; each use replaces it }
+      example:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken: 3q2-7w0pZJmR0b4n9mN1xQ...
+
+    RefreshTokenBody:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
     Review:
       type: object
       properties:
@@ -81,7 +106,7 @@ components:
       type: object
       properties:
         stage: { type: integer, enum: [0, 1, 2], description: "0 = awaiting 2-day review, 1 = awaiting 7-day, 2 = awaiting the final interval" }
-        finalIntervalDays: { type: integer, description: Configurable longest ladder rung, default 30 }
+        finalIntervalDays: { type: integer, description: "Configurable longest ladder rung, default 30" }
         isComplete: { type: boolean }
 
     # Present only when mode = ADAPTIVE.
@@ -141,7 +166,7 @@ paths:
           description: Service is up
           content:
             application/json:
-              example: { status: ok }
+              example: { status: ok, redis: not-configured }
 
   /auth/register:
     post:
@@ -178,7 +203,7 @@ paths:
 
   /auth/login:
     post:
-      summary: Log in and receive a JWT
+      summary: Log in and receive an access token and a refresh token
       security: []
       requestBody:
         required: true
@@ -196,8 +221,7 @@ paths:
           description: Login succeeded
           content:
             application/json:
-              example:
-                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+              schema: { $ref: '#/components/schemas/TokenPair' }
         '401':
           description: Invalid email or password
           content:
@@ -225,6 +249,94 @@ paths:
               schema: { $ref: '#/components/schemas/AuthUser' }
         '401':
           description: Missing or invalid token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/change-password:
+    post:
+      summary: Change the logged-in user's password
+      description: >
+        Ends every other session: all older access tokens stop working, and
+        all refresh tokens are revoked. The answer is a new token pair for
+        this session. Rate-limited like login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8, description: Must contain at least one letter and one number }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400':
+          description: The new password breaks the password rules
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Wrong current password (INVALID_CREDENTIALS), or missing/invalid access token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many attempts -- rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/refresh:
+    post:
+      summary: Trade a refresh token for a new access token and refresh token
+      description: >
+        The refresh token is the credential, so no access token is needed.
+        The used refresh token is revoked. Presenting an already-used token
+        again revokes every token from the same login (reuse detection).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401':
+          description: Unknown, expired, revoked or reused token, or the account is suspended (INVALID_REFRESH_TOKEN)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Too many attempts -- rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/logout:
+    post:
+      summary: Log out by revoking a refresh token and its whole login chain
+      description: Safe to call twice. An unknown or already-revoked token also gives 204.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenBody' }
+      responses:
+        '204':
+          description: Logged out
+        '429':
+          description: Too many attempts -- rate limited
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -319,6 +431,42 @@ paths:
                 adaptiveGrades: { AGAIN: 1, HARD: 2, GOOD: 5, EASY: 1 }
         '400':
           description: Invalid `date` (wrong format or not a real calendar date)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /items/review-history:
+    get:
+      summary: Review and skip counts per day for one calendar year (the history page)
+      description: >
+        Sparse: only days with activity are listed. `state` is `full` (reviews
+        only) or `half` (any skip that day). Deleted items are left out.
+        `currentStreak` is the number of active days in a row up to `date`;
+        it is present only when `date` is sent.
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Calendar year, 2000-9999. Defaults to the server's current year.
+          schema: { type: integer }
+        - name: date
+          in: query
+          required: false
+          description: The client's "today" (YYYY-MM-DD). Must be a real calendar date. Adds `currentStreak`.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The year's active days
+          content:
+            application/json:
+              example:
+                year: 2026
+                days:
+                  - { date: '2026-10-05', reviewCount: 3, skipCount: 0, state: full }
+                  - { date: '2026-10-06', reviewCount: 2, skipCount: 1, state: half }
+                currentStreak: 2
+        '400':
+          description: Invalid `year` or `date`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

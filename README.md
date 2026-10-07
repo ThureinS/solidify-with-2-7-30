@@ -157,23 +157,30 @@ failed set for inspection).
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | POST | `/api/v1/auth/register` | — | email + password (min 8 chars, 1 letter, 1 number) |
-| POST | `/api/v1/auth/login` | — | rate-limited (10 / 15 min per IP) |
+| POST | `/api/v1/auth/login` | — | returns `{ accessToken, refreshToken }`; rate-limited (10 / 15 min per IP) |
 | GET | `/api/v1/auth/me` | user | own account info, never the password hash |
+| POST | `/api/v1/auth/change-password` | user | `{ currentPassword, newPassword }`; ends all other sessions, returns a new token pair |
+| POST | `/api/v1/auth/refresh` | — | `{ refreshToken }`; returns a new pair, the old refresh token stops working |
+| POST | `/api/v1/auth/logout` | — | `{ refreshToken }`; revokes that login's tokens; 204 even if already revoked |
 | GET | `/api/v1/health` | — | liveness check |
 | POST | `/api/v1/items` | user | `{ text, date }` |
 | GET | `/api/v1/items` | user | `?status=active\|archived\|all&page=&limit=` |
 | GET | `/api/v1/items/due` | user | `?date=YYYY-MM-DD` |
+| GET | `/api/v1/items/review-history` | user | `?year=&date=`; active days of one year; `currentStreak` only with `date` |
 | GET | `/api/v1/items/stats` | user | `?date=` optional; weekly counts (empty weeks as 0), items by mode, Adaptive grades |
 | GET | `/api/v1/items/:id` | user | full text + review history |
 | GET | `/api/v1/items/:id/curve` | user | `?date=` optional; `{ points: [] }` for a Fixed item or an Adaptive item with no graded review |
 | PATCH | `/api/v1/items/:id` | user | text only, schedule unchanged |
 | DELETE | `/api/v1/items/:id` | user | soft delete |
-| POST | `/api/v1/items/:id/review` | user | `{ date }`, must be due |
+| POST | `/api/v1/items/:id/review` | user | `{ date, grade? }`, must be due; `grade` is required for Adaptive, not allowed for Fixed |
 | POST | `/api/v1/items/:id/skip` | user | `{ date }`, pushes due date by 1 day |
+| POST | `/api/v1/items/:id/reset` | user | `{ date }`; schedule starts over, review history stays |
+| POST | `/api/v1/items/:id/mode` | user | `{ mode, date, finalIntervalDays? }`; switches mode, same start-over as reset |
 | GET | `/api/v1/export` | user | `?includeDeleted=true\|false` |
 | GET | `/api/v1/admin/users` | admin | paginated |
 | POST | `/api/v1/admin/users/:id/suspend` | admin | can't suspend self (`CANNOT_SUSPEND_SELF`) or the demo account (`CANNOT_SUSPEND_DEMO`), both 403 |
 | POST | `/api/v1/admin/users/:id/unsuspend` | admin | |
+| GET | `/api/v1/demo/items/...`, `/api/v1/demo/export` | — | public read-only demo: the same GET paths, always the demo account; writes get 403 `DEMO_READ_ONLY` |
 
 Every error response uses one shape: `{ "error": { "message", "code" } }`.
 
@@ -187,8 +194,10 @@ over to March 2.
   the date the client sends, never the server clock — this keeps the app
   timezone-safe, and since it's a personal tool, a user could at most cheat
   their own review schedule.
-- **No refresh tokens.** A single 7-day JWT access token is the whole auth
-  story — simpler, at the cost of a week-long token lifetime if one leaks.
-- **No password recovery, email reminders, file upload, tags, or
-  statistics in this MVP** — backlogged deliberately to keep scope to the
-  spec.
+- **Short access tokens + refresh tokens** (built 2026-08-03; the original
+  spec had one 7-day JWT). The access token lasts 30 minutes; the refresh
+  token lasts 30 days and is replaced on every use. More moving parts, but
+  a leaked access token is useful for minutes, not a week.
+- **No password recovery, email reminders, file upload or tags** —
+  backlogged deliberately to keep scope to the spec. (Statistics were added
+  later as a bonus: the Stats tab and the review-history page.)
