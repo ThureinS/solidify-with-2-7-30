@@ -24,8 +24,10 @@ export default function RetrievabilityCurve({ curve }) {
   const plotWidth = width - CURVE_MARGIN.left - CURVE_MARGIN.right;
   const dayTickCount = Math.max(3, Math.floor(plotWidth / PX_PER_DAY_LABEL));
 
-  // Horizontal label beside the line, on whichever side has more room --
-  // a "today" near the right end would otherwise run off the chart.
+  // Horizontal label in a corner the curve never reaches. The curve falls
+  // from 100% (left) to ~70% (right), so: right half -> top-left of the
+  // marker, where the curve is already low; left half -> bottom-right, below
+  // the curve's floor. Top-right on the left half would sit on the line.
   const lastDay = curve.points[curve.points.length - 1].day;
   const todayOnRightHalf = curve.today && curve.today.day > lastDay / 2;
 
@@ -37,7 +39,7 @@ export default function RetrievabilityCurve({ curve }) {
           lineStyle: { stroke: 'var(--color-almanac-danger)', strokeWidth: 2, strokeDasharray: '4 4' },
           legend: `Today · ${Math.round(curve.today.retrievability * 100)}%`,
           legendOrientation: 'horizontal',
-          legendPosition: todayOnRightHalf ? 'top-left' : 'top-right',
+          legendPosition: todayOnRightHalf ? 'top-left' : 'bottom-right',
           textStyle: { fill: 'var(--color-almanac-danger)', fontSize: 12, fontWeight: 600 },
         },
       ]

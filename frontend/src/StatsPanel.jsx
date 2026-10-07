@@ -41,6 +41,11 @@ function WeeklyReviewsChart({ weekly }) {
   const every = Math.ceil(weekly.length / maxLabels);
   const dateTicks = weekly.filter((_, i) => i % every === 0).map((w) => w.weekStart);
 
+  // Counts are whole numbers, so never ask for more y-ticks than the top
+  // count: with a max of 1, a request for 5 ticks gives 0, 0.2, 0.4...
+  const maxCount = Math.max(1, ...weekly.map((w) => Math.max(w.reviewed, w.skipped)));
+  const countTicks = Math.min(5, maxCount);
+
   return (
     <div ref={wrapperRef} style={{ height: 260 }}>
       <ResponsiveLine
@@ -52,10 +57,14 @@ function WeeklyReviewsChart({ weekly }) {
         yScale={{ type: 'linear', min: 0 }}
         curve="step"
         lineWidth={2}
-        enablePoints={false}
+        // A single week is a line of zero length, which draws nothing --
+        // a brand-new user would see an empty chart. Show its dot instead.
+        enablePoints={weekly.length === 1}
+        pointSize={8}
         enableGridX={false}
+        gridYValues={countTicks}
         axisBottom={{ tickValues: dateTicks }}
-        axisLeft={{ legend: 'Actions', legendPosition: 'middle', legendOffset: -32, tickValues: 5 }}
+        axisLeft={{ legend: 'Actions', legendPosition: 'middle', legendOffset: -32, tickValues: countTicks }}
         legends={[
           {
             anchor: 'top-right',
