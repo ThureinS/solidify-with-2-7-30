@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import {
   createItem,
   exportData,
@@ -29,8 +30,15 @@ function itemStatusLabel(item) {
   return item.isComplete ? 'Archived' : STAGE_LABELS[item.stage];
 }
 
+// The row is a plain <li>. Its text is a real <Link>, and the link's ::after
+// box is stretched over the whole row (the "stretched link" trick), so a
+// click anywhere opens the item. Buttons sit above that box (relative z-10),
+// so they still get their own clicks. Screen readers see one link plus
+// separate buttons, instead of buttons nested inside a fake button.
 const ITEM_ROW_CLASS =
-  'flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 cursor-pointer hover:border-almanac-accent';
+  'relative flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:border-almanac-accent';
+const ITEM_LINK_CLASS =
+  "text-almanac-ink no-underline outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']";
 
 function tabClass(active) {
   return active
@@ -56,7 +64,6 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
   const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [selectedId, setSelectedId] = useState(null);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [completionRate, setCompletionRate] = useState(null); // null while loading / no data yet
@@ -215,18 +222,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     }
   }
 
-  if (selectedId) {
-    return (
-      <ItemDetail
-        token={token}
-        itemId={selectedId}
-        onBack={() => setSelectedId(null)}
-        onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
-      />
-    );
-  }
-
-  return (
+  const listView = (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-medium mb-1">
@@ -345,26 +341,16 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         ) : (
           <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
             {dueItems.map((item) => (
-              <li
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  if (!e.target.closest('button')) setSelectedId(item.id);
-                }}
-                onKeyDown={(e) => {
-                  if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button')) {
-                    e.preventDefault();
-                    setSelectedId(item.id);
-                  }
-                }}
-                className={ITEM_ROW_CLASS}
-              >
+              <li key={item.id} className={ITEM_ROW_CLASS}>
                 <div>
-                  <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.text}</p>
+                  <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
+                    <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
+                      {item.text}
+                    </Link>
+                  </p>
                   <span className="text-xs text-almanac-mute">{itemStatusLabel(item)}</span>
                 </div>
-                <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+                <div className="relative z-10 flex gap-2 flex-shrink-0 flex-wrap justify-end">
                   {item.mode === 'ADAPTIVE' ? (
                     GRADES.map((grade) => (
                       <button
@@ -442,21 +428,13 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
           ) : (
             <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
               {allItems.map((item) => (
-                <li
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedId(item.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedId(item.id);
-                    }
-                  }}
-                  className={ITEM_ROW_CLASS}
-                >
+                <li key={item.id} className={ITEM_ROW_CLASS}>
                   <div>
-                    <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.preview}</p>
+                    <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
+                      <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
+                        {item.preview}
+                      </Link>
+                    </p>
                     <span className="text-xs text-almanac-mute">
                       {itemStatusLabel(item)} · next review {item.nextReviewDate}
                     </span>
@@ -480,5 +458,18 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         <AccountPanel token={token} onTokenRefresh={onTokenRefresh} />
       )}
     </div>
+  );
+
+  // Dashboard stays mounted while an item is open (App.jsx routes "/*" here),
+  // so its tab, page and filter survive the trip to the item and Back.
+  return (
+    <Routes>
+      <Route
+        path="items/:id"
+        element={<ItemDetail token={token} onChanged={view === 'due' ? refreshDueItems : refreshAllItems} />}
+      />
+      <Route index element={listView} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getItem, updateItem, deleteItem, getRetrievabilityCurve, resetItem, switchItemMode } from './api';
 import RetrievabilityCurve from './RetrievabilityCurve';
 
 // ponytail: duplicated from Dashboard; a shared constants module isn't worth it for one array.
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
 
-export default function ItemDetail({ token, itemId, onBack, onChanged }) {
+export default function ItemDetail({ token, onChanged }) {
+  const { id: itemId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [item, setItem] = useState(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -29,6 +33,14 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
         .catch((err) => setError(err.message));
     }
   }, [token, itemId, item?.mode, item?.stability]);
+
+  // location.key is 'default' only on the first page of this tab's visit
+  // (a refresh or a shared link). Going -1 there would leave the app, so go
+  // to the list instead.
+  function onBack() {
+    if (location.key === 'default') navigate('/');
+    else navigate(-1);
+  }
 
   function startEditing() {
     setDraft(item.text);
