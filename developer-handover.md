@@ -166,6 +166,11 @@ auth.service.js registerUser()          worker.js (separate process)
   `@example.com` addresses, and each one bounced back to the Gmail inbox.
   Before you start the worker, check `redis-cli LLEN bull:emails:wait`.
   Remove unwanted jobs with BullMQ's `job.remove()`.
+  **Fixed 2026-10-07 (`333ad75`):** the worker now skips addresses at
+  `example.com`, `example.net` and `example.org` (reserved for testing,
+  RFC 2606) and marks the job completed, so it isn't retried. The check is
+  `src/lib/testEmail.js`; the worker image copies that file too. Old jobs to
+  real addresses still wait in Redis, so the `LLEN` check still matters.
 - **Redis memory limit: 128 MB, policy `noeviction`** (`docker-compose.yml`,
   2026-10-07). The policy must stay `noeviction`, because this one Redis
   holds both the cache and the queue. An evicting policy could delete job or
@@ -798,3 +803,36 @@ than 10 s (error 57014), and the API returns the normal 500.
   check `/health`, log in, and load the due items on the live API.
 
 **Redis memory limit.** See §6.
+
+### 12d. Next push: the lane work (2026-10-07)
+
+`main` holds all lane work (L0, LA, LB, LC, LD, LE, LF) and is not pushed
+yet. There is no new migration and no new environment variable.
+
+**Deploy order matters once.** The frontend and the API are separate
+Vercel projects (§12a), and they can finish deploying at different times.
+- The new item page asks for the curve of *every* item, at the same time as
+  the item (lane LF, U19). Only the new API answers `{ points: [] }` for a
+  Fixed item; the old API answers 400 `ITEM_NOT_ADAPTIVE`.
+- New frontend + old API: a Fixed item's page shows an error until the API
+  deploy is done. Old frontend + new API: safe.
+- So after the push, check the API deployment is live before you open a
+  Fixed item, or simply wait until both deployments show "Ready".
+
+**Checks after the push** (read-only, on the live site):
+1. `/health`, then log in, then load the due items (also closes §12c).
+2. Open `/demo`, `/stats` and `/history` directly (no 404, lane L0).
+3. Open a Fixed item and an Adaptive item: no error; the curve shows only
+   for the Adaptive item with a graded review.
+4. Stats: weeks with no activity show as 0 (lane LC).
+5. A CORS preflight answers `Access-Control-Max-Age: 600` (U19 fix B).
+
+**Demo data:** reseeded on prod 2026-10-07 with `scripts/seed-test-data.js`
+(user ran it; checked on the live demo API: 5 due, weeks up to 2026-10-05).
+The public demo account is `stats-test@example.com` (`src/lib/demoAccount.js`);
+`demo@example.com` is only the local `prisma/seed.js` user. The data is
+relative to the seed day, so run it again on the morning of a demo.
+
+**Decided, not built:** the cold start (about 1.5 s extra after a few idle
+minutes) stays as it is. Moving the function region or keeping it warm was
+considered and rejected.

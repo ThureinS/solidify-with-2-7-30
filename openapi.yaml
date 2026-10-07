@@ -489,6 +489,50 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ItemDetail' }
 
+  /items/{id}/curve:
+    get:
+      summary: Memory-decay (retrievability) curve of one Adaptive item
+      description: >
+        The item's own FSRS stability, turned into the estimated chance of
+        recall for each day since its last review (never a mocked line).
+        A Fixed item, or an Adaptive item with no graded review yet, has no
+        curve: the answer is 200 with `points: []`, not an error, so a
+        client can ask for the curve before it knows the item's mode.
+        `today` is present only when `date` is sent.
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+        - name: date
+          in: query
+          required: false
+          description: The client's "today" (YYYY-MM-DD). Must be a real calendar date. Adds the `today` marker.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The curve, or an empty list when the item has none
+          content:
+            application/json:
+              examples:
+                curve:
+                  summary: Adaptive item with a graded review
+                  value:
+                    points:
+                      - { day: 0, retrievability: 1 }
+                      - { day: 3.2, retrievability: 0.93 }
+                    today: { day: 3, retrievability: 0.94 }
+                noCurve:
+                  summary: Fixed item, or Adaptive with no graded review
+                  value: { points: [] }
+        '400':
+          description: Invalid `date` (wrong format or not a real calendar date)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Not found (missing, deleted, or not yours)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /export:
     get:
       summary: Export all of the logged-in user's own data as JSON

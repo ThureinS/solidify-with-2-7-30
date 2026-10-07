@@ -165,7 +165,7 @@ failed set for inspection).
 | GET | `/api/v1/items/due` | user | `?date=YYYY-MM-DD` |
 | GET | `/api/v1/items/stats` | user | `?date=` optional; weekly counts (empty weeks as 0), items by mode, Adaptive grades |
 | GET | `/api/v1/items/:id` | user | full text + review history |
-| GET | `/api/v1/items/:id/curve` | user | `?date=` optional; Adaptive items with a graded review only |
+| GET | `/api/v1/items/:id/curve` | user | `?date=` optional; `{ points: [] }` for a Fixed item or an Adaptive item with no graded review |
 | PATCH | `/api/v1/items/:id` | user | text only, schedule unchanged |
 | DELETE | `/api/v1/items/:id` | user | soft delete |
 | POST | `/api/v1/items/:id/review` | user | `{ date }`, must be due |

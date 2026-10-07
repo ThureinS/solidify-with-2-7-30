@@ -123,7 +123,7 @@ async function switchItemMode(userId, id, { mode, date, finalIntervalDays }) {
 // Retrievability curve: the item's own real Difficulty/Stability run
 // through fsrs.retrievabilityCurve -- never a mocked line (ADR 0003). No
 // curve exists before an item's first graded review, so a Fixed item or an
-// unreviewed Adaptive one is a rejected state, not a flat/defaulted line.
+// unreviewed Adaptive one gets an empty list, never a flat/defaulted line.
 async function getRetrievabilityCurve(userId, id, date) {
   const item = await getItemById(userId, id);
   // A Fixed item, or an Adaptive one with no graded review yet, has no curve.
