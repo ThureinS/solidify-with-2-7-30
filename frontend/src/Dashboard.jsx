@@ -60,6 +60,7 @@ function modePillClass(active) {
 export default function Dashboard({ token, user, onTokenRefresh }) {
   const [view, setView] = useState('due'); // 'due' | 'all' | 'admin' | 'account'
   const [dueItems, setDueItems] = useState([]);
+  const [hasItems, setHasItems] = useState(null); // null until checked; only asked when nothing is due
   const [newText, setNewText] = useState('');
   const [newItemMode, setNewItemMode] = useState('FIXED');
   const [error, setError] = useState('');
@@ -139,7 +140,14 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
   async function refreshDueItems() {
     try {
-      setDueItems(await getDueItems(token));
+      const due = await getDueItems(token);
+      setDueItems(due);
+      // An empty due list means either "new user" or "done for today". Only
+      // a new user needs the how-it-works line, so ask if any items exist.
+      if (due.length === 0) {
+        const { total } = await listItems(token, { status: 'all' });
+        setHasItems(total > 0);
+      }
       setError('');
     } catch (err) {
       setError(err.message);
@@ -352,7 +360,19 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
       {view === 'due' ? (
         dueItems.length === 0 ? (
-          <p className="text-sm text-almanac-mute">Nothing due today.</p>
+          hasItems === false ? (
+            <div className="text-sm text-almanac-mute flex flex-col gap-1">
+              <p className="m-0 text-almanac-ink">Nothing here yet. Add one thing you learned today, in the box above.</p>
+              <p className="m-0">
+                Fixed: it comes back after 2 days, then 7, then 30, counted from each review. Adaptive: it is due
+                today. Grade how well you remembered it, and the next date adapts to you.
+              </p>
+            </div>
+          ) : hasItems === null ? null : (
+            <p className="text-sm text-almanac-mute">
+              Nothing due today. You are done. Upcoming reviews are under All items.
+            </p>
+          )
         ) : (
           <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
             {dueItems.map((item) => (
