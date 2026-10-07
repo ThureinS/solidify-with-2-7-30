@@ -1,5 +1,13 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { register, login } from './api';
+
+// Server messages start lowercase ("password must be at least 8
+// characters") because they're part of the API's error format, which
+// other clients may rely on. Capitalize for display only.
+function displayMessage(message) {
+  return message.charAt(0).toUpperCase() + message.slice(1);
+}
 
 function segmentClass(active) {
   return active
@@ -25,10 +33,17 @@ export default function AuthForm({ onLoggedIn }) {
       const { accessToken, refreshToken } = await login(email, password);
       onLoggedIn(accessToken, refreshToken);
     } catch (err) {
-      setError(err.message);
+      setError(displayMessage(err.message));
     } finally {
       setBusy(false);
     }
+  }
+
+  // A login error ("Invalid email or password") means nothing on the
+  // Register tab, so switching tabs starts with a clean form message.
+  function switchMode(next) {
+    setMode(next);
+    setError('');
   }
 
   return (
@@ -48,12 +63,12 @@ export default function AuthForm({ onLoggedIn }) {
         </div>
 
         <div className="flex border border-almanac-border rounded-full p-1">
-          <button type="button" onClick={() => setMode('login')} className={segmentClass(mode === 'login')}>
+          <button type="button" onClick={() => switchMode('login')} className={segmentClass(mode === 'login')}>
             Log in
           </button>
           <button
             type="button"
-            onClick={() => setMode('register')}
+            onClick={() => switchMode('register')}
             className={segmentClass(mode === 'register')}
           >
             Register
@@ -71,16 +86,28 @@ export default function AuthForm({ onLoggedIn }) {
               className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-bg border border-almanac-border rounded-lg"
             />
           </label>
-          <label className="flex flex-col gap-1.5 text-sm text-almanac-mute">
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-bg border border-almanac-border rounded-lg"
-            />
-          </label>
+          <div className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-1.5 text-sm text-almanac-mute">
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                aria-describedby={mode === 'register' ? 'password-rule' : undefined}
+                className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-bg border border-almanac-border rounded-lg"
+              />
+            </label>
+            {/* Shown up front, not only after a failed try. Mirrors the
+                backend's registerSchema (src/dto/auth.schemas.js) -- the
+                server still checks it; this line is just the heads-up.
+                Outside the <label> so it isn't read as part of the field's name. */}
+            {mode === 'register' && (
+              <p id="password-rule" className="m-0 text-xs text-almanac-mute">
+                At least 8 characters, with a letter and a number.
+              </p>
+            )}
+          </div>
           {error && <p className="text-sm text-almanac-danger">{error}</p>}
           <button
             type="submit"
@@ -90,6 +117,15 @@ export default function AuthForm({ onLoggedIn }) {
             {mode === 'login' ? 'Log in' : 'Register & log in'}
           </button>
         </form>
+
+        {/* The public read-only demo (ADR 0004) -- a way to look around
+            before signing up. /demo works without logging in. */}
+        <p className="m-0 text-center text-sm text-almanac-mute">
+          Just looking?{' '}
+          <Link to="/demo" className="text-almanac-accent">
+            Try the demo
+          </Link>
+        </p>
       </div>
     </div>
   );
