@@ -43,6 +43,23 @@ const curveQuerySchema = z.object({
   date: dateStringSchema.optional(),
 });
 
+// date is the client's "today" (same rule as curveQuerySchema): it only
+// extends the weekly list's empty weeks up to the current week. Optional so
+// callers from before it existed keep working unchanged. The extra check
+// rejects impossible dates like 2026-13-45, which the format regex alone
+// lets through and which would otherwise roll over into a real-looking week.
+const statsQuerySchema = z.object({
+  date: dateStringSchema
+    .refine((s) => {
+      // zod still runs this when the regex above failed, so it must cope
+      // with any string -- NaN parts just fail the comparisons.
+      const [y, m, d] = s.split('-').map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d));
+      return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+    }, 'date must be a real calendar date')
+    .optional(),
+});
+
 module.exports = {
   createItemSchema,
   updateItemSchema,
@@ -50,4 +67,5 @@ module.exports = {
   resetItemSchema,
   switchModeSchema,
   curveQuerySchema,
+  statsQuerySchema,
 };

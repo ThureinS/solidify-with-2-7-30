@@ -288,15 +288,34 @@ paths:
   /items/stats:
     get:
       summary: Aggregate stats for the stats dashboard -- weekly review/skip counts, item counts by mode, and Adaptive grade distribution
+      description: >
+        `weekly` has one entry per Monday-starting week, all time, from the first week with any
+        review or skip. Weeks with no activity are included as 0/0 (not left out). With `date`,
+        the list continues up to the week containing that date; without it, the list ends at the
+        last active week. No reviews at all gives `[]`. At most the 520 most recent weeks are returned.
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: The client's "today" (YYYY-MM-DD). Must be a real calendar date. Optional, so older callers keep working.
+          schema: { type: string, format: date }
       responses:
         '200':
           description: Dashboard stats
           content:
             application/json:
               example:
-                weekly: [{ weekStart: '2026-08-17', reviewed: 12, skipped: 3 }]
+                weekly:
+                  - { weekStart: '2026-08-17', reviewed: 12, skipped: 3 }
+                  - { weekStart: '2026-08-24', reviewed: 0, skipped: 0 }
+                  - { weekStart: '2026-08-31', reviewed: 4, skipped: 1 }
                 itemsByMode: { FIXED: 8, ADAPTIVE: 3 }
                 adaptiveGrades: { AGAIN: 1, HARD: 2, GOOD: 5, EASY: 1 }
+        '400':
+          description: Invalid `date` (wrong format or not a real calendar date)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /items/{id}:
     parameters:

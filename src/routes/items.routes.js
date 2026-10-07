@@ -9,6 +9,7 @@ const {
   resetItemSchema,
   switchModeSchema,
   curveQuerySchema,
+  statsQuerySchema,
 } = require('../dto/item.schemas');
 const {
   reviewActionSchema,
@@ -33,7 +34,7 @@ function buildItemsRouter(identifyUser) {
   // Must come before '/:id' -- otherwise Express would match "due"/"review-history" as an :id.
   router.get('/due', validate(dueQuerySchema, 'query'), controller.listDue);
   router.get('/review-history', validate(reviewHistoryQuerySchema, 'query'), controller.reviewHistory);
-  router.get('/stats', controller.getStats);
+  router.get('/stats', validate(statsQuerySchema, 'query'), controller.getStats);
 
   router.get('/:id', controller.getItem);
   router.patch('/:id', validate(updateItemSchema), controller.updateItem);

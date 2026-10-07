@@ -203,14 +203,14 @@ export function skipItem(token, itemId) {
 }
 
 export function getStats(token) {
-  return request('/items/stats', { token });
+  return request(`/items/stats?date=${todayLocal()}`, { token });
 }
 
 // --- Public read-only demo (ADR 0004): no token, always the fixed seeded
 // account, same route table as above under /demo instead of /items. ---
 
 export function getDemoStats() {
-  return request('/demo/items/stats');
+  return request(`/demo/items/stats?date=${todayLocal()}`);
 }
 
 export function getDemoDueItems() {

@@ -230,29 +230,67 @@ async function getCurrentStreak(userId, today) {
 // that week", which isn't stored, so charting one would claim a rate the
 // data can't support (ADR 0003, the same trap Dashboard.jsx's completion
 // stat already documents: it can't tell 2-for-2 from 40-for-40).
-function deriveWeeklyStats(groupedRows) {
+//
+// Every week between the first active one and the last is present, empty
+// ones as 0/0 -- leaving them out made a 9-month gap look like one week on
+// the chart (ADR 0003). today (the client's YYYY-MM-DD, optional) extends
+// the run of zero weeks up to the current week; without it the list stops
+// at the last active week rather than guessing "now" from the server clock.
+// No rows at all stays [] -- an account with no reviews has no first week.
+function deriveWeeklyStats(groupedRows, today) {
   const byWeek = new Map();
   for (const row of groupedRows) {
-    const date = parseDate(row.date.toISOString().slice(0, 10));
-    const mondayOffset = (date.getUTCDay() + 6) % 7; // 0=Mon .. 6=Sun
-    const weekStart = toDateString(addDays(date, -mondayOffset));
+    const weekStart = mondayOf(row.date);
     const week = byWeek.get(weekStart) || { weekStart, reviewed: 0, skipped: 0 };
     if (row.result === 'REVIEWED') week.reviewed += row._count;
     else week.skipped += row._count;
     byWeek.set(weekStart, week);
   }
-  return [...byWeek.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  if (byWeek.size === 0) return [];
+
+  const active = [...byWeek.keys()].sort();
+  let first = active[0];
+  let last = active[active.length - 1];
+  // today earlier than the last review (a client clock that's off, or a
+  // review logged with a later date) never hides real weeks -- end at
+  // whichever is later.
+  if (today && mondayOf(parseDate(today)) > last) last = mondayOf(parseDate(today));
+
+  // Both ends are client-provided dates, so a stray far-future one (e.g.
+  // date=9999-12-31) would otherwise loop over ~400k weeks. Ten years is
+  // far beyond any real account here; past that, keep the most recent.
+  // Clamped before the loop, not sliced after it, so the loop stays short.
+  const earliestAllowed = toDateString(addDays(parseDate(last), -7 * (MAX_WEEKLY_STATS_WEEKS - 1)));
+  if (first < earliestAllowed) first = earliestAllowed;
+
+  // Compares Dates, not strings: past year 9999 toISOString() gives
+  // "+010000-...", which sorts before "9999-..." as text and never ends.
+  const lastDate = parseDate(last);
+  const weeks = [];
+  for (let d = parseDate(first); d <= lastDate; d = addDays(d, 7)) {
+    const weekStart = toDateString(d);
+    weeks.push(byWeek.get(weekStart) || { weekStart, reviewed: 0, skipped: 0 });
+  }
+  return weeks;
+}
+
+const MAX_WEEKLY_STATS_WEEKS = 520;
+
+function mondayOf(date) {
+  const day = parseDate(date.toISOString().slice(0, 10));
+  const mondayOffset = (day.getUTCDay() + 6) % 7; // 0=Mon .. 6=Sun
+  return toDateString(addDays(day, -mondayOffset));
 }
 
 // All-time, like getCurrentStreak -- a stats dashboard that reset every
 // January 1st would be wrong for the same reason a streak would be.
-async function getWeeklyStats(userId) {
+async function getWeeklyStats(userId, today) {
   const grouped = await prisma.review.groupBy({
     by: ['date', 'result'],
     where: { item: { userId, deletedAt: null } },
     _count: true,
   });
-  return deriveWeeklyStats(grouped);
+  return deriveWeeklyStats(grouped, today);
 }
 
 async function getItemCountsByMode(userId) {
@@ -282,9 +320,9 @@ async function getAdaptiveGradeDistribution(userId) {
   return counts;
 }
 
-async function getStats(userId) {
+async function getStats(userId, today) {
   const [weekly, itemsByMode, adaptiveGrades] = await Promise.all([
-    getWeeklyStats(userId),
+    getWeeklyStats(userId, today),
     getItemCountsByMode(userId),
     getAdaptiveGradeDistribution(userId),
   ]);

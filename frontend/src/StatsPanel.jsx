@@ -1,30 +1,60 @@
 import { ResponsiveLine } from '@nivo/line';
-import { NIVO_THEME } from './nivoTheme';
+import { NIVO_THEME, useChartWidth } from './nivoTheme';
+
+const WEEKLY_MARGIN = { top: 20, right: 40, bottom: 40, left: 40 };
+// Room for one "2025-07-21" label (~60px at 11px) plus a gap.
+const PX_PER_DATE_LABEL = 80;
+
+// One tooltip for the whole week (both series), so it's clear the two
+// numbers are counts for that one week, not points on a continuous line.
+function WeekTooltip({ slice }) {
+  const countFor = (id) => slice.points.find((p) => p.seriesId === id)?.data.y ?? 0;
+  return (
+    <div style={NIVO_THEME.tooltip.container} className="rounded-md px-3 py-2 text-xs">
+      <div className="font-medium mb-0.5">Week of {slice.points[0].data.x}</div>
+      <div>
+        Reviewed {countFor('Reviewed')} · Skipped {countFor('Skipped')}
+      </div>
+    </div>
+  );
+}
 
 // Raw counts, never a ratio -- see items.service.js's deriveWeeklyStats
 // comment. A reviewed/skipped fraction needs a denominator ("items due that
 // week") this app doesn't store, so charting one would claim a rate the
 // data can't support (ADR 0003).
+//
+// The API sends every week, empty ones as 0, so equal spacing on the x-axis
+// is equal time. A step line keeps each week's count flat across its week:
+// a smooth or sloped line would draw in-between values that never existed.
 function WeeklyReviewsChart({ weekly }) {
+  const [wrapperRef, width] = useChartWidth();
   const data = [
     { id: 'Reviewed', data: weekly.map((w) => ({ x: w.weekStart, y: w.reviewed })) },
     { id: 'Skipped', data: weekly.map((w) => ({ x: w.weekStart, y: w.skipped })) },
   ];
 
+  // Label only every Nth week, as many as fit the current width without
+  // overlapping -- 60+ weeks on a phone leaves room for about 2-3 labels.
+  const plotWidth = width - WEEKLY_MARGIN.left - WEEKLY_MARGIN.right;
+  const maxLabels = Math.max(2, Math.floor(plotWidth / PX_PER_DATE_LABEL));
+  const every = Math.ceil(weekly.length / maxLabels);
+  const dateTicks = weekly.filter((_, i) => i % every === 0).map((w) => w.weekStart);
+
   return (
-    <div style={{ height: 260 }}>
+    <div ref={wrapperRef} style={{ height: 260 }}>
       <ResponsiveLine
         data={data}
         theme={NIVO_THEME}
         colors={['var(--color-almanac-accent)', 'var(--color-almanac-mute)']}
-        margin={{ top: 20, right: 30, bottom: 50, left: 40 }}
+        margin={WEEKLY_MARGIN}
         xScale={{ type: 'point' }}
         yScale={{ type: 'linear', min: 0 }}
-        curve="monotoneX"
-        lineWidth={3}
-        pointSize={6}
+        curve="step"
+        lineWidth={2}
+        enablePoints={false}
         enableGridX={false}
-        axisBottom={{ tickRotation: -30 }}
+        axisBottom={{ tickValues: dateTicks }}
         axisLeft={{ legend: 'Actions', legendPosition: 'middle', legendOffset: -32, tickValues: 5 }}
         legends={[
           {
@@ -37,7 +67,8 @@ function WeeklyReviewsChart({ weekly }) {
             symbolShape: 'circle',
           },
         ]}
-        useMesh
+        enableSlices="x"
+        sliceTooltip={WeekTooltip}
         animate
       />
     </div>
@@ -82,8 +113,8 @@ export default function StatsPanel({ stats }) {
       <section>
         <h2 className="font-display text-lg font-medium mb-1">Reviews per week</h2>
         <p className="text-xs text-almanac-mute mb-3">
-          Raw counts of reviewed vs. skipped actions, all time. Not a rate -- there's no record of how
-          many items were due each week to divide by.
+          Raw counts of reviewed vs. skipped actions per week, all time. Weeks with no activity show
+          as 0. Not a rate -- there's no record of how many items were due each week to divide by.
         </p>
         {hasWeekly ? (
           <WeeklyReviewsChart weekly={stats.weekly} />
