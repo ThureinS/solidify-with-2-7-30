@@ -164,6 +164,11 @@ gave (Again, Hard, Good or Easy). In the detail view you can:
   words change)
 - **Delete** it (this is a *soft* delete — it disappears from your lists but
   isn't destroyed; see Export below)
+- **Reset** it, or **Switch** it between Fixed and Adaptive, under "Start
+  over". Both send the schedule back to day one; the review history stays.
+
+Delete, Reset and Switch each ask you to confirm first, in a box inside the
+page. Press **Esc**, **Cancel**, or click outside the box to back out.
 
 ### Downloading your data
 
@@ -222,7 +227,7 @@ an item is on.
 
 **Why are all the buttons greyed out?**
 You're logged in to the demo account. It is read-only: you can look around,
-but you can't add, review, skip, edit or delete anything. A banner at the top
+but you can't add, review, skip, edit, delete, reset or switch anything. A banner at the top
 of the page says so.
 
 **I don't see the Admin tab — why?**
