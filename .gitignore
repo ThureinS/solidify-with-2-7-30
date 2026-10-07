@@ -6,5 +6,6 @@ node_modules/
 !.env.example
 .DS_Store
 learning.md
+todo.md
 .playwright-mcp/
 .vercel
