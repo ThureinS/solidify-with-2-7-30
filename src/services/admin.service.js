@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { AppError } = require('../middleware/errorHandler');
 const { revokeAllRefreshTokensForUser } = require('./auth.service');
+const { DEMO_ACCOUNT_EMAIL } = require('../lib/demoAccount');
 
 async function listUsers({ page, limit }) {
   const [users, total] = await Promise.all([
@@ -15,6 +16,16 @@ async function listUsers({ page, limit }) {
 }
 
 async function setSuspended(targetId, isSuspended) {
+  // The public demo (ADR 0004) is shown to visitors and instructors; an admin
+  // click must never lock it. The admin UI hides the button too, but only this
+  // check stops a direct API call.
+  if (isSuspended) {
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { email: true } });
+    if (target?.email === DEMO_ACCOUNT_EMAIL) {
+      throw new AppError(403, 'CANNOT_SUSPEND_DEMO', 'The demo account cannot be suspended');
+    }
+  }
+
   const { count } = await prisma.user.updateMany({
     where: { id: targetId },
     data: { isSuspended },
