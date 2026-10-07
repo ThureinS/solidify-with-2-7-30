@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getItem, updateItem, deleteItem, getRetrievabilityCurve, resetItem, switchItemMode, todayLocal } from './api';
+import ConfirmDialog from './ConfirmDialog';
 import RetrievabilityCurve from './RetrievabilityCurve';
 
 // ponytail: duplicated from Dashboard; a shared constants module isn't worth it for one array.
@@ -33,24 +34,22 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [curve, setCurve] = useState(null);
+  // The action waiting for a yes/no in the dialog: 'delete', 'reset', 'switch', or null.
+  const [pending, setPending] = useState(null);
 
+  // Ask for the item and its curve at the same time, not one after the other
+  // (U19): each request is a slow round trip on prod. We don't know the mode
+  // yet, so the server answers { points: [] } when there's no curve. Only an
+  // Adaptive item with a graded review (stability set) shows one -- see the
+  // render below. Reset and Switch both clear stability, so no refetch is needed.
   useEffect(() => {
     getItem(token, itemId)
       .then(setItem)
       .catch((err) => setError(err.message));
+    getRetrievabilityCurve(token, itemId)
+      .then(setCurve)
+      .catch((err) => setError(err.message));
   }, [token, itemId]);
-
-  // Only an Adaptive item that's had at least one graded review has a real
-  // stability to plot -- fetch the curve only then (see item.mode/stability
-  // above; a brand-new/reset Adaptive item has stability: null and gets no
-  // curve at all, never a flat mocked one).
-  useEffect(() => {
-    if (item?.mode === 'ADAPTIVE' && item.stability != null) {
-      getRetrievabilityCurve(token, itemId)
-        .then(setCurve)
-        .catch((err) => setError(err.message));
-    }
-  }, [token, itemId, item?.mode, item?.stability]);
 
   // location.key is 'default' only on the first page of this tab's visit
   // (a refresh or a shared link). Going -1 there would leave the app, so go
@@ -78,10 +77,18 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
     }
   }
 
+  // Delete, Reset and Switch each ask first. The buttons only set `pending`
+  // to which action is waiting; the dialog's Confirm runs it.
+  async function handleConfirm() {
+    const action = pending;
+    // Close first, so a double click can't send the request twice.
+    setPending(null);
+    if (action === 'delete') await handleDelete();
+    else if (action === 'reset') await handleReset();
+    else if (action === 'switch') await handleSwitchMode();
+  }
+
   async function handleDelete() {
-    // ponytail: native confirm prevents accidental loss with zero extra state.
-    // Upgrade to an inline two-step confirm if the browser dialog feels off-brand.
-    if (!window.confirm('Delete this item? It will be moved to deleted.')) return;
     setError('');
     try {
       await deleteItem(token, itemId);
@@ -96,7 +103,6 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
   // both wipe the item's schedule state back to a start-of-life state and
   // return the updated item; review history is untouched by either.
   async function handleReset() {
-    if (!window.confirm('Reset this item? Its schedule starts over from day one — review history stays.')) return;
     setError('');
     try {
       const updated = await resetItem(token, itemId);
@@ -109,12 +115,6 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
 
   async function handleSwitchMode() {
     const nextMode = item.mode === 'ADAPTIVE' ? 'FIXED' : 'ADAPTIVE';
-    if (
-      !window.confirm(
-        `Switch to ${nextMode === 'ADAPTIVE' ? 'Adaptive' : 'Fixed'} mode? Its schedule starts over from day one — review history stays.`,
-      )
-    )
-      return;
     setError('');
     try {
       const updated = await switchItemMode(token, itemId, nextMode);
@@ -156,8 +156,34 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
   // Archived and deleted items have no review coming, so they can't be late.
   const overdue = item.deletedAt || item.isComplete ? '' : overdueLabel(item.nextReviewDate, todayLocal());
 
+  const nextModeLabel = item.mode === 'ADAPTIVE' ? 'Fixed' : 'Adaptive';
+  // All three use the red (danger) Confirm: none can be undone. Switching
+  // back doesn't bring the old schedule back -- it starts over again.
+  const confirmText = {
+    delete: { title: 'Delete item', message: 'Delete this item? It will be moved to deleted.', label: 'Delete' },
+    reset: {
+      title: 'Reset item',
+      message: 'Reset this item? Its schedule starts over from day one — review history stays.',
+      label: 'Reset',
+    },
+    switch: {
+      title: 'Switch mode',
+      message: `Switch to ${nextModeLabel} mode? Its schedule starts over from day one — review history stays.`,
+      label: `Switch to ${nextModeLabel}`,
+    },
+  }[pending];
+
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-7">
+      <ConfirmDialog
+        open={pending !== null}
+        title={confirmText?.title}
+        message={confirmText?.message}
+        confirmLabel={confirmText?.label}
+        onConfirm={handleConfirm}
+        onCancel={() => setPending(null)}
+      />
+
       <button
         type="button"
         onClick={onBack}
@@ -212,7 +238,7 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
                 </button>
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setPending('delete')}
                   disabled={readOnly}
                   className={`rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer${DISABLED}`}
                 >
@@ -282,7 +308,7 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
           <div className="flex gap-2.5">
             <button
               type="button"
-              onClick={handleReset}
+              onClick={() => setPending('reset')}
               disabled={readOnly}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
@@ -294,7 +320,7 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
             </button>
             <button
               type="button"
-              onClick={handleSwitchMode}
+              onClick={() => setPending('switch')}
               disabled={readOnly}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
