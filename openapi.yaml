@@ -12,6 +12,9 @@ info:
     takes a Grade (Again/Hard/Good/Easy) and the next interval is computed
     from the item's own Difficulty/Stability, with no fixed ceiling and no
     archiving.
+    Every `date` field (query or body) is the client's calendar date in
+    YYYY-MM-DD form and must be a real date: an impossible one such as
+    2026-02-30 is rejected with 400 VALIDATION_ERROR.
   version: 1.0.0
 servers:
   - url: /api/v1

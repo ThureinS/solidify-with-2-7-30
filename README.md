@@ -163,7 +163,9 @@ failed set for inspection).
 | POST | `/api/v1/items` | user | `{ text, date }` |
 | GET | `/api/v1/items` | user | `?status=active\|archived\|all&page=&limit=` |
 | GET | `/api/v1/items/due` | user | `?date=YYYY-MM-DD` |
+| GET | `/api/v1/items/stats` | user | `?date=` optional; weekly counts (empty weeks as 0), items by mode, Adaptive grades |
 | GET | `/api/v1/items/:id` | user | full text + review history |
+| GET | `/api/v1/items/:id/curve` | user | `?date=` optional; Adaptive items with a graded review only |
 | PATCH | `/api/v1/items/:id` | user | text only, schedule unchanged |
 | DELETE | `/api/v1/items/:id` | user | soft delete |
 | POST | `/api/v1/items/:id/review` | user | `{ date }`, must be due |
@@ -174,6 +176,10 @@ failed set for inspection).
 | POST | `/api/v1/admin/users/:id/unsuspend` | admin | |
 
 Every error response uses one shape: `{ "error": { "message", "code" } }`.
+
+Every `date` (query or body) must be `YYYY-MM-DD` **and** a real calendar
+date: `2026-02-30` gets a 400 `VALIDATION_ERROR` instead of silently rolling
+over to March 2.
 
 ## Known trade-offs (deliberate)
 

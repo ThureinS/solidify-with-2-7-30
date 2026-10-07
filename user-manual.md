@@ -170,12 +170,41 @@ gave (Again, Hard, Good or Easy). In the detail view you can:
 Delete, Reset and Switch each ask you to confirm first, in a box inside the
 page. Press **Esc**, **Cancel**, or click outside the box to back out.
 
+### Memory-decay curve (Adaptive items only)
+
+An Adaptive item that you have graded at least once also shows a
+**memory-decay curve**. It is the app's estimate of how likely you are to
+still remember the item, for each day since your last review. The curve
+starts at 100% on the day you reviewed and falls slowly after that.
+
+A dashed red line marks **today**, with a label such as "Today · 86%". That is
+the estimated chance that you would recall the item right now. It is an
+estimate from your past grades, not a test. An Adaptive item you haven't
+graded yet has no curve, because there is nothing to base it on.
+
 ### Downloading your data
 
 At the top of "All items," check **Include deleted** if you want deleted
 items included, then click **Download my items**. This saves a `.json` file
 with your account info and every item (including its full review history) —
 useful as a backup, or just to see everything in one place.
+
+## The "Stats" tab
+
+Three charts, all built from what you have actually done:
+
+- **Reviews per week** — how many reviews and skips you logged in each week
+  (weeks start on Monday), for all time. A week with no activity shows as 0,
+  so a long break is visible as a long flat stretch. The line is flat across
+  each week and jumps at the week boundary, because each number belongs to the
+  whole week. Hover a week (or tap it on a phone) to see its exact counts.
+  These are plain counts, not a percentage: the app doesn't record how many
+  items were due each week, so it can't tell you a "completion rate".
+- **Items by mode** — how many Fixed and Adaptive items you have.
+- **Adaptive grades** — how often you chose Again, Hard, Good and Easy.
+  Fixed reviews have no grade, so they aren't counted here.
+
+The public **demo** page shows the same three charts for the demo account.
 
 ## Light and dark
 
