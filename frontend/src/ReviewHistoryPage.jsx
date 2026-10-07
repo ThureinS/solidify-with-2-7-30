@@ -31,6 +31,9 @@ export default function ReviewHistoryPage({ token }) {
   // card read 0 handled as soon as you browsed to a past year.
   const [handledToday, setHandledToday] = useState(null);
   const [error, setError] = useState('');
+  // The day whose details show under its month. A tap works on a phone,
+  // where hover (the `title` tooltip) doesn't exist.
+  const [selectedDate, setSelectedDate] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,9 +73,9 @@ export default function ReviewHistoryPage({ token }) {
       <header className="flex flex-col gap-2 border-b border-almanac-border pb-7">
         <h1 className="font-display text-3xl font-medium">Your review history</h1>
         <p className="text-almanac-mute max-w-md leading-relaxed text-sm">
-          Full moon: reviewed, nothing skipped. Half moon: a skip was
-          involved that day -- skipping is a legitimate move here, not a
-          failure. Blank: no activity.
+          Each circle is one day. A filled circle means you reviewed and
+          skipped nothing. A half-filled circle means you skipped at least one
+          item that day. Skipping is fine. An empty ring means no activity.
         </p>
       </header>
 
@@ -89,20 +92,23 @@ export default function ReviewHistoryPage({ token }) {
             {totalToday === null ? '...' : `${handledToday} of ${totalToday} handled`}
           </span>
           <span className="text-sm text-almanac-mute max-w-sm leading-relaxed">
-            Today's workload, including anything overdue -- the one number
-            on this page that's a true percentage, since it's the only day
-            we can actually count what was due.
+            Everything due today, including overdue items. The circle fills
+            up as you work through them.
           </span>
         </div>
       </div>
 
       <div>
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="font-display text-xl font-medium">Past months</h2>
+          <h2 className="font-display text-xl font-medium">Month by month</h2>
           <div className="flex items-center gap-3 text-sm text-almanac-mute">
             <button
               type="button"
-              onClick={() => setYear((y) => y - 1)}
+              aria-label="Previous year"
+              onClick={() => {
+                setYear((y) => y - 1);
+                setSelectedDate(null);
+              }}
               className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent"
             >
               &larr;
@@ -110,7 +116,11 @@ export default function ReviewHistoryPage({ token }) {
             <span className="tabular-nums">{year}</span>
             <button
               type="button"
-              onClick={() => setYear((y) => Math.min(y + 1, currentYear))}
+              aria-label="Next year"
+              onClick={() => {
+                setYear((y) => Math.min(y + 1, currentYear));
+                setSelectedDate(null);
+              }}
               disabled={year >= currentYear}
               className="bg-transparent border-0 p-0 cursor-pointer [font:inherit] text-inherit hover:text-almanac-accent disabled:opacity-30 disabled:cursor-default disabled:hover:text-almanac-mute"
             >
@@ -119,8 +129,8 @@ export default function ReviewHistoryPage({ token }) {
           </div>
         </div>
         <p className="text-almanac-mute text-sm mb-5 max-w-xl leading-relaxed">
-          One row per month. Hover any day for the date, review count, and
-          skip count.
+          One row per month. Tap or click a day to see how many items you
+          reviewed and skipped.
         </p>
 
         {days === null ? (
@@ -128,49 +138,107 @@ export default function ReviewHistoryPage({ token }) {
         ) : (
           <div className="flex flex-col gap-4">
             {MONTHS.slice(0, monthsToShow).map((label, monthIndex) => (
-              <MonthRow key={label} label={label} year={year} monthIndex={monthIndex} days={days} />
+              <MonthRow
+                key={label}
+                label={label}
+                year={year}
+                monthIndex={monthIndex}
+                days={days}
+                today={today}
+                selectedDate={selectedDate}
+                onSelect={setSelectedDate}
+              />
             ))}
           </div>
         )}
 
-        <div className="flex items-center gap-2.5 mt-6 flex-wrap text-xs text-almanac-mute">
-          <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
-          {/* Not "all reviewed": a full moon only means every logged action that
-              day was a review. Items you never touched leave no row at all, so
-              they can't be counted here. */}
-          <span>Reviewed, no skips</span>
-          <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border ml-3" style={mixedShadow} />
-          <span>Mixed (some skipped)</span>
-          <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute ml-3" />
-          <span>No activity</span>
+        {/* Each icon + label pair is one flex item, so wrapping on a phone
+            never splits an icon from its label. */}
+        <div className="flex items-center gap-x-5 gap-y-2 mt-6 flex-wrap text-xs text-almanac-mute">
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
+            {/* Not "all reviewed": a full moon only means every logged action that
+                day was a review. Items you never touched leave no row at all, so
+                they can't be counted here. */}
+            <span>Reviewed, no skips</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border" style={mixedShadow} />
+            <span>Mixed (some skipped)</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute" />
+            <span>No activity</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-mute opacity-50" />
+            <span>Upcoming</span>
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-function MonthRow({ label, year, monthIndex, days }) {
+// "Oct 3, 2026: 2 reviewed, 1 skipped" -- shown on hover, on tap, and read
+// out by screen readers.
+function describeDay(label, day, year, entry) {
+  const when = `${label} ${day}, ${year}`;
+  return entry
+    ? `${when}: ${entry.reviewCount} reviewed, ${entry.skipCount} skipped`
+    : `${when}: no activity`;
+}
+
+function MonthRow({ label, year, monthIndex, days, today, selectedDate, onSelect }) {
   const total = daysInMonth(year, monthIndex);
   const cells = [];
+  let selectedText = null;
   for (let d = 1; d <= total; d++) {
     const date = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    cells.push(<DayCell key={date} date={date} day={d} entry={days.get(date)} />);
+    const entry = days.get(date);
+    const description = describeDay(label, d, year, entry);
+    const isSelected = date === selectedDate;
+    if (isSelected) selectedText = description;
+    cells.push(
+      <DayCell
+        key={date}
+        day={d}
+        entry={entry}
+        description={description}
+        // Plain string compare works because both are YYYY-MM-DD.
+        isFuture={date > today}
+        isSelected={isSelected}
+        onSelect={() => onSelect(isSelected ? null : date)}
+      />,
+    );
   }
   return (
     <div className="flex items-start gap-3.5">
       <div className="w-9 flex-none text-xs text-almanac-mute text-right pt-0.5">{label}</div>
-      <div className="flex gap-1.5 overflow-x-auto p-0.5">{cells}</div>
+      <div className="flex flex-col gap-1.5 min-w-0">
+        <div className="flex gap-1.5 overflow-x-auto p-1">{cells}</div>
+        {selectedText && <p className="m-0 text-sm text-almanac-ink">{selectedText}</p>}
+      </div>
     </div>
   );
 }
 
-function DayCell({ date, day, entry }) {
+function DayCell({ day, entry, description, isFuture, isSelected, onSelect }) {
+  // Upcoming days: a faint dashed ring, so they don't look like a missed day.
+  // Not tappable -- there is nothing to show yet.
+  if (isFuture) {
+    return (
+      <div className="flex flex-col items-center gap-0.5 flex-none" title="Upcoming">
+        <div className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-mute opacity-50" />
+        <span className="text-[0.58rem] text-almanac-mute tabular-nums opacity-50">{day}</span>
+      </div>
+    );
+  }
+
   const state = entry ? entry.state : 'none';
-  const title = entry
-    ? `${date} -- ${entry.reviewCount} reviewed, ${entry.skipCount} skipped`
-    : `${date} -- no activity`;
 
   let cellClass = 'w-3.5 h-3.5 rounded-full border';
+  if (isSelected) cellClass += ' outline-2 outline-offset-2 outline-almanac-ink';
   let style;
   if (state === 'full') {
     cellClass += ' bg-almanac-accent border-almanac-accent';
@@ -188,11 +256,22 @@ function DayCell({ date, day, entry }) {
     cellClass += ' bg-transparent border-almanac-mute';
   }
 
+  // A button so a tap or click shows the details under the month. tabIndex -1
+  // keeps ~300 days out of the Tab order; screen readers still reach each
+  // day and read its aria-label.
   return (
-    <div className="flex flex-col items-center gap-0.5 flex-none" title={title}>
-      <div className={cellClass} style={style} />
+    <button
+      type="button"
+      tabIndex={-1}
+      title={description}
+      aria-label={description}
+      aria-pressed={isSelected}
+      onClick={onSelect}
+      className="flex flex-col items-center gap-0.5 flex-none bg-transparent border-0 p-0 cursor-pointer [font:inherit]"
+    >
+      <span className={`block ${cellClass}`} style={style} />
       <span className="text-[0.58rem] text-almanac-mute tabular-nums">{day}</span>
-    </div>
+    </button>
   );
 }
 
