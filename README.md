@@ -30,8 +30,9 @@ Actions for CI.
 
 **Bonus: a background email queue** (BullMQ + Redis + nodemailer) sends a
 welcome email when a user registers. The API and worker never talk to each
-other directly, only through Redis. See `implementation-journey.md` for the
-full build story.
+other directly, only through Redis. The worker skips test addresses
+(`@example.com`, `.net`, `.org`), so seed and test sign-ups send no mail.
+See `implementation-journey.md` for the full build story.
 
 `Dockerfile` is multi-stage with two independent final targets -- `api` and
 `worker` (`docker-compose.yml` builds each via `build.target`) -- so both can

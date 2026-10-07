@@ -10,6 +10,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --ignore-scripts --omit=dev
 COPY worker.js ./
+COPY src/lib/testEmail.js ./src/lib/
 CMD ["node", "worker.js"]
 
 # ---- deps: full install (incl. the `prisma` CLI devDependency) so

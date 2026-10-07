@@ -1,6 +1,7 @@
 const { Worker } = require('bullmq');
 const Redis = require('ioredis');
 const nodemailer = require('nodemailer');
+const { isTestEmail } = require('./src/lib/testEmail');
 
 const connection = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 connection.on('error', (err) => console.error('Worker Redis error:', err.message));
@@ -14,6 +15,12 @@ const transporter = nodemailer.createTransport({
 
 async function processJob(job) {
   const { email } = job.data;
+  // Test sign-ups would only bounce back to our inbox. The job still
+  // completes, so BullMQ doesn't retry it.
+  if (isTestEmail(email)) {
+    console.log(`Skipped welcome email to test address ${email}`);
+    return;
+  }
   await transporter.sendMail({
     from: process.env.GMAIL_USER,
     to: email,
