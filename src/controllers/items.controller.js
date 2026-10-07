@@ -123,7 +123,7 @@ async function switchMode(req, res, next) {
 
 async function getStats(req, res, next) {
   try {
-    res.json(await itemsService.getStats(req.userId));
+    res.json(await itemsService.getStats(req.userId, req.validatedQuery.date));
   } catch (err) {
     next(err);
   }

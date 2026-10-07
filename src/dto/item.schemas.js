@@ -43,6 +43,13 @@ const curveQuerySchema = z.object({
   date: dateStringSchema.optional(),
 });
 
+// date is the client's "today" (same rule as curveQuerySchema): it only
+// extends the weekly list's empty weeks up to the current week. Optional so
+// callers from before it existed keep working unchanged.
+const statsQuerySchema = z.object({
+  date: dateStringSchema.optional(),
+});
+
 module.exports = {
   createItemSchema,
   updateItemSchema,
@@ -50,4 +57,5 @@ module.exports = {
   resetItemSchema,
   switchModeSchema,
   curveQuerySchema,
+  statsQuerySchema,
 };
