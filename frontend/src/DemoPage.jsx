@@ -39,8 +39,8 @@ export default function DemoPage() {
       <div>
         <h1 className="font-display text-2xl font-medium mb-1">Live demo</h1>
         <p className="text-sm text-almanac-mute">
-          A real, seeded account shown read-only -- every number on this page comes from actual
-          stored data, not a mock.
+          A real sample account, shown read-only. Every number on this page comes from stored
+          data, not a mock-up.
         </p>
       </div>
       {error && <p className="text-sm text-almanac-danger">{error}</p>}

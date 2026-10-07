@@ -279,7 +279,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                 reads 100%. Items you never opened write no row and are invisible
                 here, by the same limitation as the history grid's legend. */}
             {completionRate !== null && (
-              <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
+              <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened, because nothing is recorded for those.">
                 {` · ${completionRate}% reviewed rather than skipped this year`}
               </span>
             )}

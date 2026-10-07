@@ -123,7 +123,7 @@ export default function StatsPanel({ stats }) {
         <h2 className="font-display text-lg font-medium mb-1">Reviews per week</h2>
         <p className="text-xs text-almanac-mute mb-3">
           Raw counts of reviewed vs. skipped actions per week, all time. Weeks with no activity show
-          as 0. Not a rate -- there's no record of how many items were due each week to divide by.
+          as 0. These are counts, not a rate: the app doesn't record how many items were due each week.
         </p>
         {hasWeekly ? (
           <WeeklyReviewsChart weekly={stats.weekly} />

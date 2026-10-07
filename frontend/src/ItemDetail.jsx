@@ -257,7 +257,7 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
           <h2 className="font-display text-lg font-medium mb-3">Memory-decay curve</h2>
           {item.stability == null ? (
             <p className="text-sm text-almanac-mute m-0">
-              No review history yet -- review this item to start tracking its memory curve.
+              No graded review yet. Review this item to start its memory curve.
             </p>
           ) : curve ? (
             <RetrievabilityCurve curve={curve} />
