@@ -81,7 +81,7 @@ export default function AuthForm({ onLoggedIn }) {
               className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-bg border border-almanac-border rounded-lg"
             />
           </label>
-          {error && <p className="text-sm text-almanac-accent">{error}</p>}
+          {error && <p className="text-sm text-almanac-danger">{error}</p>}
           <button
             type="submit"
             disabled={busy}

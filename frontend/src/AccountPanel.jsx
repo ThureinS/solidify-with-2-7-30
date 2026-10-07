@@ -72,7 +72,7 @@ export default function AccountPanel({ token, onTokenRefresh }) {
             className="px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
           />
         </label>
-        {error && <p className="text-sm text-almanac-accent">{error}</p>}
+        {error && <p className="text-sm text-almanac-danger">{error}</p>}
         {success && <p className="text-sm text-almanac-mute">{success}</p>}
         <button
           type="submit"

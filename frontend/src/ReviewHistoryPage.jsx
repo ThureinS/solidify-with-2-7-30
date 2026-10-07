@@ -76,7 +76,7 @@ export default function ReviewHistoryPage({ token }) {
         </p>
       </header>
 
-      {error && <p className="text-almanac-accent">{error}</p>}
+      {error && <p className="text-almanac-danger">{error}</p>}
 
       <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6 flex items-center gap-6 flex-wrap">
         <div

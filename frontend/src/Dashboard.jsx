@@ -335,7 +335,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
             </button>
           </form>
           {addedMessage && <p className="text-sm text-almanac-accent">{addedMessage}</p>}
-          {error && <p className="text-sm text-almanac-accent">{error}</p>}
+          {error && <p className="text-sm text-almanac-danger">{error}</p>}
         </>
       )}
 

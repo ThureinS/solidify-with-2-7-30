@@ -106,7 +106,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
           &larr; Back
         </button>
         {error ? (
-          <p className="text-sm text-almanac-accent">{error}</p>
+          <p className="text-sm text-almanac-danger">{error}</p>
         ) : (
           <p className="text-sm text-almanac-mute">Loading&hellip;</p>
         )}
@@ -189,7 +189,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
         )}
       </div>
 
-      {error && <p className="text-sm text-almanac-accent">{error}</p>}
+      {error && <p className="text-sm text-almanac-danger">{error}</p>}
 
       {item.mode === 'ADAPTIVE' && !item.deletedAt && (
         <div className="bg-almanac-panel border border-almanac-border rounded-2xl px-7 py-6">

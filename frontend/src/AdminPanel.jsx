@@ -87,7 +87,7 @@ export default function AdminPanel({ token, currentUserId }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {error && <p className="text-sm text-almanac-accent">{error}</p>}
+      {error && <p className="text-sm text-almanac-danger">{error}</p>}
 
       {users.length === 0 ? (
         <p className="text-sm text-almanac-mute">No users.</p>

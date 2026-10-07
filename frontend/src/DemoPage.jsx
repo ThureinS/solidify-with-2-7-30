@@ -43,7 +43,7 @@ export default function DemoPage() {
           stored data, not a mock.
         </p>
       </div>
-      {error && <p className="text-sm text-almanac-accent">{error}</p>}
+      {error && <p className="text-sm text-almanac-danger">{error}</p>}
 
       {dueItems && (
         <section>
