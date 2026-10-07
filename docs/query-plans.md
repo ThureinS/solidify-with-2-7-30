@@ -48,7 +48,7 @@ SELECT COUNT(*) AS "_count$_all", "public"."reviews"."date", "public"."reviews".
 
 In `psql`, each statement was wrapped in `PREPARE name(...) AS <statement>` and run with `EXPLAIN (ANALYZE, BUFFERS) EXECUTE name(...)`. That keeps the `$1, $2…` parameters, as Prisma sends them. Pasting values into the SQL by hand can change their types, and then the plan is a different one.
 
-Every plan below is the **second run** (a "warm" run). The first run loads pages into memory; the second shows the steady state, so all buffers are `hit`.
+Every plan below except one is the **second run** (a "warm" run). The first run loads pages into memory; the second shows the steady state, so its buffers are all `hit`. The exception is the A2 reviews plan, a first run: its `read=1` is one page that came from disk.
 
 ## A. Seed data only (27 users, 29 items, 183 reviews)
 
@@ -148,7 +148,7 @@ The transaction ended with `ROLLBACK`, so no other session ever saw the rows. Af
 
 - The index answers **both** conditions it contains: `userId = …` and `nextReviewDate <= today` (the `Index Cond` line). That leaves 53 candidate rows out of 100,000.
 - `deletedAt IS NULL` and `isComplete = false` are **not** in the index, so Postgres checks them afterwards (`Filter`). They removed only 7 rows, so leaving them out of the index costs almost nothing.
-- There is still a small `Sort` on `nextReviewDate`. A bitmap scan reads pages in disk order, not index order, so the result must be re-sorted. Sorting 46 rows in memory took microseconds. With a very large due list, the planner can switch to a plain Index Scan, which returns rows already in date order and needs no Sort.
+- There is still a small `Sort` on `nextReviewDate`. The planner expected about 49 rows on a few pages, so it chose a bitmap scan. A bitmap scan reads pages in disk order, not index order, so the result must be sorted again. A plain Index Scan would return rows already in date order and need no Sort, but sorting 46 rows in memory takes microseconds, so the planner judged the bitmap scan cheaper overall.
 - Honest caveat: the test inserted each user's items together, so one user's 100 rows sit in only 3 table pages (`Heap Blocks: exact=3`). In real use, items are added over months, so one user's rows spread over more pages. Real page counts would be somewhat higher. The Seq Scan cost would not change, because it always reads the whole table.
 
 ### B2. Item detail review list, one item among 300,000 reviews: index used
