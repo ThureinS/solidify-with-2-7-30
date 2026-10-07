@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getDemoStats, getDemoDueItems } from './api';
 import StatsPanel from './StatsPanel';
 
@@ -20,7 +21,9 @@ function itemStatusLabel(item) {
 // served through /api/v1/demo/* -- no token anywhere on this page, and the
 // backend rejects any write against this account regardless. No review/skip
 // buttons here on purpose: the read-only-ness is real, not just hidden UI.
-export default function DemoPage() {
+// loggedIn only picks the wording of the way out: "/" shows the login form
+// to a visitor and the user's own items to someone logged in.
+export default function DemoPage({ loggedIn }) {
   const [stats, setStats] = useState(null);
   const [dueItems, setDueItems] = useState(null);
   const [error, setError] = useState('');
@@ -42,6 +45,9 @@ export default function DemoPage() {
           A real sample account, shown read-only. Every number on this page comes from stored
           data, not a mock-up.
         </p>
+        <Link to="/" className="inline-block mt-2 text-sm text-almanac-accent">
+          {loggedIn ? 'Back to your items →' : 'Log in or create your own account →'}
+        </Link>
       </div>
       {error && <p className="text-sm text-almanac-danger">{error}</p>}
 

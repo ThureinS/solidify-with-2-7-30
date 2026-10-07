@@ -118,7 +118,7 @@ function App() {
     return (
       <AlmanacShell onToggleMode={toggleMode} loggedIn={false}>
         <Routes>
-          <Route path="/demo" element={<DemoPage />} />
+          <Route path="/demo" element={<DemoPage loggedIn={false} />} />
           <Route path="*" element={<AuthForm onLoggedIn={handleLoggedIn} />} />
         </Routes>
       </AlmanacShell>
@@ -171,7 +171,7 @@ function App() {
         />
         <Route path="/history" element={<ReviewHistoryPage token={token} />} />
         <Route path="/stats" element={<StatsPage token={token} />} />
-        <Route path="/demo" element={<DemoPage />} />
+        <Route path="/demo" element={<DemoPage loggedIn />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AlmanacShell>
