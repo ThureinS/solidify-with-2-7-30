@@ -265,29 +265,33 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         <h1 className="font-display text-2xl font-medium mb-1">
           {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : view === 'admin' ? 'Admin' : 'Account'}
         </h1>
-        <span className="text-sm text-almanac-mute">
-          {/* "left", not "due": anything already reviewed/skipped today has
-              dropped off this list, so this is the remainder -- History's
-              "x of y handled" counts the same day's full workload. */}
-          {dueItems.length} left today
-          {/* NOT "completion": this is reviewed / (reviewed + skipped) across the
-              actions you logged. It has no idea what was due, so it can't be a
-              completion rate -- review 3 items all year and skip nothing and it
-              reads 100%. Items you never opened write no row and are invisible
-              here, by the same limitation as the history grid's legend. */}
-          {completionRate !== null && (
-            <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
-              {` · ${completionRate}% reviewed rather than skipped this year`}
-            </span>
-          )}
-          {!!streak && (
-            <span title="Any day you reviewed or skipped something keeps the streak going.">
-              {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
-            </span>
-          )}
-          {weeklyRecap &&
-            ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
-        </span>
+        {/* Today's numbers belong to the Due tab only; on All items, Admin
+            and Account they were noise about a different screen. */}
+        {view === 'due' && (
+          <span className="text-sm text-almanac-mute">
+            {/* "left", not "due": anything already reviewed/skipped today has
+                dropped off this list, so this is the remainder -- History's
+                "x of y handled" counts the same day's full workload. */}
+            {dueItems.length} left today
+            {/* NOT "completion": this is reviewed / (reviewed + skipped) across the
+                actions you logged. It has no idea what was due, so it can't be a
+                completion rate -- review 3 items all year and skip nothing and it
+                reads 100%. Items you never opened write no row and are invisible
+                here, by the same limitation as the history grid's legend. */}
+            {completionRate !== null && (
+              <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
+                {` · ${completionRate}% reviewed rather than skipped this year`}
+              </span>
+            )}
+            {!!streak && (
+              <span title="Any day you reviewed or skipped something keeps the streak going.">
+                {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
+              </span>
+            )}
+            {weeklyRecap &&
+              ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
+          </span>
+        )}
       </div>
 
       {readOnly && (
@@ -301,7 +305,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
           goal typed while /auth/me is still in flight -- or while it's failing
           with a 5xx, which App.jsx keeps the session alive through -- would save
           under 'dailyGoal:anon' and silently vanish on the next good load. */}
-      {user?.id && (
+      {user?.id && view === 'due' && (
         <div className="flex items-center gap-4 flex-wrap">
           <label className="flex items-center gap-2 text-sm text-almanac-mute">
             Daily goal
