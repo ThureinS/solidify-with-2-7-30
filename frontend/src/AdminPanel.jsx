@@ -170,8 +170,14 @@ export default function AdminPanel({ token, currentUserId }) {
         page={page}
         total={total}
         limit={limit}
-        onPrev={() => setPage(page - 1)}
-        onNext={() => setPage(page + 1)}
+        onPrev={() => {
+          setFocusUserId(null);
+          setPage(page - 1);
+        }}
+        onNext={() => {
+          setFocusUserId(null);
+          setPage(page + 1);
+        }}
       />
     </div>
   );
