@@ -63,6 +63,10 @@ function App() {
   function handleLoggedIn(accessToken, refreshToken) {
     localStorage.setItem(TOKEN_KEY, accessToken);
     if (refreshToken) storeRefreshToken(refreshToken);
+    // A failed refresh logs out and THEN its /auth/me rejection lands with
+    // no status, which sets meFailed -- clear it here, in the same render
+    // as the new token, or the next login flashes "Can't reach the server".
+    setMeFailed(false);
     setToken(accessToken);
   }
 
