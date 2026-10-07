@@ -857,3 +857,15 @@ relative to the seed day, so run it again on the morning of a demo.
 **Decided, not built:** the cold start (about 1.5 s extra after a few idle
 minutes) stays as it is. Moving the function region or keeping it warm was
 considered and rejected.
+
+**Later on 2026-10-07:** `b395837` (dev-note "--" texts rewritten) and
+`e153bd8` (`/demo` links back to the real app) were pushed and checked
+live. Live checks as admin and as `stats-test` passed (read-only).
+
+**Known issue, fix planned:** `scripts/seed-test-data.js` gives review rows
+to Fixed items in turn (`addDay()`), not by their schedule. On the demo
+account's item pages this shows impossible histories: reviews before the
+item was added, 20+ reviews at stage 0, a review and a skip on the same day.
+The planned fix simulates each Fixed item through the real `applyReview` /
+`applySkip`, then the prod seed is run again. After that, the numbers above
+("streak 14", "5 due") will change.

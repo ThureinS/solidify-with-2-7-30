@@ -3685,3 +3685,48 @@ guessed.
    time go, and what did the two fixes change?
 3. Why was filling empty weeks with 0 a non-breaking change, while
    changing the curve's 400 to a 200 needed a deploy-order warning?
+
+### Later the same day: live checks, two small fixes, and a seed-data problem
+
+**Live checks after the push.** The user logged in on the live site twice,
+and the assistant checked the pages read-only:
+- **As admin:** the empty-state text, the email in the header, and the
+  admin list. The demo account has a "Demo" badge and no Suspend button.
+  The Suspend confirm box names the email, Esc closes it, and nothing was
+  sent. Stats and History pages also checked. No console errors.
+- **As `stats-test` (the demo account):** the read-only banner, the greyed-out
+  buttons, direct item links (`/items/:id`), the Adaptive curve with a
+  readable "Today · 98%" label, grades in the item history, and no curve
+  panel or error on a Fixed item.
+
+**Two small fixes, both pushed and checked live:**
+- `b395837`: four visible texts still read like dev notes with "--" (Demo
+  intro, Stats intro, the no-curve message, a tooltip). U9 had fixed this
+  only on the History page.
+- `e153bd8`: a logged-out visitor on `/demo` had no way to the real app.
+  The header shows no navigation then, and the page had no link. Found by
+  the user. The page now links to `/`: "Log in or create your own account"
+  for visitors, "Back to your items" for a logged-in user.
+
+**A seed-data problem, found, not fixed yet.** On the demo account, a Fixed
+item at its "2-day review" showed 20+ reviews, some dated before the item
+was added, and a review and a skip on the same day. That can't happen with
+the real schedule. Cause: `scripts/seed-test-data.js` hands out review rows
+to items in turn (`addDay()`), without following each item's schedule. The
+stats and history pages looked fine, because they only count rows; the item
+page shows each row, so the problem became visible once item pages got
+their own URLs. This breaks the spirit of ADR 0003 (showcase data must not
+misrepresent). The fix (simulate every Fixed item through the real
+`applyReview`/`applySkip`, the way the Adaptive item is already simulated)
+is planned for the next session.
+
+**New concept**
+
+- **Fixture realism:** fake data must still obey the app's own rules.
+  A page that shows aggregates can hide broken fake data; a page that shows
+  each row exposes it.
+
+**You should be able to explain**
+
+1. Why did the bad seed data stay hidden until item pages got their own
+   URLs, even though it had existed since July?
