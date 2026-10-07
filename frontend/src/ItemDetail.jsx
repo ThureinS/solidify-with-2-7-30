@@ -1,11 +1,33 @@
 import { useEffect, useState } from 'react';
-import { getItem, updateItem, deleteItem, getRetrievabilityCurve, resetItem, switchItemMode } from './api';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { getItem, updateItem, deleteItem, getRetrievabilityCurve, resetItem, switchItemMode, todayLocal } from './api';
 import RetrievabilityCurve from './RetrievabilityCurve';
 
 // ponytail: duplicated from Dashboard; a shared constants module isn't worth it for one array.
 const STAGE_LABELS = ['2-day review', '7-day review', '30-day review'];
+const GRADE_LABELS = { AGAIN: 'Again', HARD: 'Hard', GOOD: 'Good', EASY: 'Easy' };
 
-export default function ItemDetail({ token, itemId, onBack, onChanged }) {
+// "overdue by N days", or '' when not late. Both dates are calendar dates
+// (YYYY-MM-DD); "today" is the client's local date (todayLocal), never the
+// server's clock. Date.UTC turns each into midnight UTC, so the difference
+// is whole days with no time-zone or daylight-saving drift.
+function overdueLabel(nextReviewDate, today) {
+  const [y1, m1, d1] = nextReviewDate.split('-').map(Number);
+  const [y2, m2, d2] = today.split('-').map(Number);
+  const days = (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000;
+  if (days <= 0) return '';
+  return `overdue by ${days} day${days === 1 ? '' : 's'}`;
+}
+
+// Appended to a button's classes so a disabled one (demo account) looks inactive.
+const DISABLED = ' disabled:opacity-40 disabled:cursor-not-allowed';
+
+// readOnly: the demo account. Its writes would get 403 from the server, so
+// the write buttons are disabled instead (see Dashboard's banner).
+export default function ItemDetail({ token, readOnly, onChanged }) {
+  const { id: itemId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [item, setItem] = useState(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -29,6 +51,14 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
         .catch((err) => setError(err.message));
     }
   }, [token, itemId, item?.mode, item?.stability]);
+
+  // location.key is 'default' only on the first page of this tab's visit
+  // (a refresh or a shared link). Going -1 there would leave the app, so go
+  // to the list instead.
+  function onBack() {
+    if (location.key === 'default') navigate('/');
+    else navigate(-1);
+  }
 
   function startEditing() {
     setDraft(item.text);
@@ -123,6 +153,8 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
       : item.isComplete
         ? 'Archived'
         : STAGE_LABELS[item.stage];
+  // Archived and deleted items have no review coming, so they can't be late.
+  const overdue = item.deletedAt || item.isComplete ? '' : overdueLabel(item.nextReviewDate, todayLocal());
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-7">
@@ -165,6 +197,7 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
             <p className="text-base leading-relaxed whitespace-pre-wrap m-0">{item.text}</p>
             <p className="text-sm text-almanac-mute m-0">
               {statusLabel} &middot; added {item.dateAdded} &middot; next review {item.nextReviewDate}
+              {overdue && <span className="text-almanac-danger"> &middot; {overdue}</span>}
             </p>
 
             {!item.deletedAt && (
@@ -172,14 +205,16 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
                 <button
                   type="button"
                   onClick={startEditing}
-                  className="rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                  disabled={readOnly}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer"
+                  disabled={readOnly}
+                  className={`rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-danger border border-almanac-danger cursor-pointer${DISABLED}`}
                 >
                   Delete
                 </button>
@@ -227,7 +262,9 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
                 <div>
                   <div className="text-sm">{review.date}</div>
                   <div className="text-xs text-almanac-mute">
+                    {/* grade is set only for Adaptive reviews; Fixed reviews and skips have null */}
                     {review.result === 'REVIEWED' ? 'Reviewed' : 'Skipped'}
+                    {review.grade && ` · ${GRADE_LABELS[review.grade]}`}
                   </div>
                 </div>
               </li>
@@ -246,7 +283,8 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
             <button
               type="button"
               onClick={handleReset}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+              disabled={readOnly}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -257,7 +295,8 @@ export default function ItemDetail({ token, itemId, onBack, onChanged }) {
             <button
               type="button"
               onClick={handleSwitchMode}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+              disabled={readOnly}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7 7h13l-4-4" />

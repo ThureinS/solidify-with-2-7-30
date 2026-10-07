@@ -47,6 +47,9 @@ components:
         role: { type: string, enum: [USER, ADMIN] }
         isSuspended: { type: boolean }
         createdAt: { type: string, format: date-time }
+        isDemo:
+          type: boolean
+          description: True only for the public read-only demo account. Its writes return 403 DEMO_READ_ONLY.
 
     Review:
       type: object

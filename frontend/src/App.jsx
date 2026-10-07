@@ -163,8 +163,10 @@ function App() {
   return (
     <AlmanacShell onToggleMode={toggleMode} loggedIn email={user.email} onLogout={handleLogout}>
       <Routes>
+        {/* "/*", not "/": Dashboard owns the sub-routes under it (items/:id),
+            so it stays mounted while an item is open and keeps its tab/page. */}
         <Route
-          path="/"
+          path="/*"
           element={<Dashboard token={token} user={user} onTokenRefresh={handleLoggedIn} />}
         />
         <Route path="/history" element={<ReviewHistoryPage token={token} />} />

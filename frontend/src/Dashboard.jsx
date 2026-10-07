@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import {
   createItem,
   exportData,
@@ -29,8 +30,30 @@ function itemStatusLabel(item) {
   return item.isComplete ? 'Archived' : STAGE_LABELS[item.stage];
 }
 
+// "overdue by N days", or '' when not late. Both dates are calendar dates
+// (YYYY-MM-DD); "today" is the client's local date (todayLocal), never the
+// server's clock. Date.UTC turns each into midnight UTC, so the difference
+// is whole days with no time-zone or daylight-saving drift.
+// ponytail: duplicated in ItemDetail, like STAGE_LABELS.
+function overdueLabel(nextReviewDate, today) {
+  const [y1, m1, d1] = nextReviewDate.split('-').map(Number);
+  const [y2, m2, d2] = today.split('-').map(Number);
+  const days = (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000;
+  if (days <= 0) return '';
+  return `overdue by ${days} day${days === 1 ? '' : 's'}`;
+}
+
+// The row is a plain <li>. Its text is a real <Link>, and the link's ::after
+// box is stretched over the whole row (the "stretched link" trick), so a
+// click anywhere opens the item. Buttons sit above that box (relative z-10),
+// so they still get their own clicks. Screen readers see one link plus
+// separate buttons, instead of buttons nested inside a fake button.
+// Below 640px (Tailwind's sm) the text sits above the buttons, so a row of
+// five grade buttons can't squeeze the text into a 1-2 word column.
 const ITEM_ROW_CLASS =
-  'flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 cursor-pointer hover:border-almanac-accent';
+  'relative flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-almanac-accent';
+const ITEM_LINK_CLASS =
+  "text-almanac-ink no-underline outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']";
 
 function tabClass(active) {
   return active
@@ -38,15 +61,25 @@ function tabClass(active) {
     : 'rounded-full px-4 py-1.5 text-sm bg-almanac-panel text-almanac-mute border border-almanac-border cursor-pointer hover:text-almanac-ink';
 }
 
+// Appended to a button's classes so a disabled one (demo account) looks inactive.
+const DISABLED = ' disabled:opacity-40 disabled:cursor-not-allowed';
+
+// border-0 and bg-transparent are needed: this app skips Tailwind's reset,
+// so a bare <button> keeps the browser's own 2px border and light-grey
+// background (bright in dark mode, and a second border inside the pill).
 function modePillClass(active) {
-  return active
-    ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg cursor-pointer'
-    : 'px-3.5 py-1.5 rounded-full text-xs text-almanac-mute cursor-pointer';
+  return (
+    (active
+      ? 'px-3.5 py-1.5 rounded-full text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer'
+      : 'px-3.5 py-1.5 rounded-full text-xs bg-transparent text-almanac-mute border-0 cursor-pointer hover:text-almanac-ink') +
+    DISABLED
+  );
 }
 
 export default function Dashboard({ token, user, onTokenRefresh }) {
   const [view, setView] = useState('due'); // 'due' | 'all' | 'admin' | 'account'
   const [dueItems, setDueItems] = useState([]);
+  const [hasItems, setHasItems] = useState(null); // null until checked; only asked when nothing is due
   const [newText, setNewText] = useState('');
   const [newItemMode, setNewItemMode] = useState('FIXED');
   const [error, setError] = useState('');
@@ -56,7 +89,6 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
   const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [selectedId, setSelectedId] = useState(null);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [completionRate, setCompletionRate] = useState(null); // null while loading / no data yet
@@ -127,7 +159,14 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
   async function refreshDueItems() {
     try {
-      setDueItems(await getDueItems(token));
+      const due = await getDueItems(token);
+      setDueItems(due);
+      // An empty due list means either "new user" or "done for today". Only
+      // a new user needs the how-it-works line, so ask if any items exist.
+      if (due.length === 0) {
+        const { total } = await listItems(token, { status: 'all' });
+        setHasItems(total > 0);
+      }
       setError('');
     } catch (err) {
       setError(err.message);
@@ -215,53 +254,58 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     }
   }
 
-  if (selectedId) {
-    return (
-      <ItemDetail
-        token={token}
-        itemId={selectedId}
-        onBack={() => setSelectedId(null)}
-        onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
-      />
-    );
-  }
-
-  return (
+  const today = todayLocal();
+  // The public demo account can look but not change anything. The server
+  // already rejects its writes (403 DEMO_READ_ONLY); this just says so up
+  // front and greys the buttons out, instead of an error after a click.
+  const readOnly = !!user?.isDemo;
+  const listView = (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-medium mb-1">
           {view === 'due' ? 'Due today' : view === 'all' ? 'All items' : view === 'admin' ? 'Admin' : 'Account'}
         </h1>
-        <span className="text-sm text-almanac-mute">
-          {/* "left", not "due": anything already reviewed/skipped today has
-              dropped off this list, so this is the remainder -- History's
-              "x of y handled" counts the same day's full workload. */}
-          {dueItems.length} left today
-          {/* NOT "completion": this is reviewed / (reviewed + skipped) across the
-              actions you logged. It has no idea what was due, so it can't be a
-              completion rate -- review 3 items all year and skip nothing and it
-              reads 100%. Items you never opened write no row and are invisible
-              here, by the same limitation as the history grid's legend. */}
-          {completionRate !== null && (
-            <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
-              {` · ${completionRate}% reviewed rather than skipped this year`}
-            </span>
-          )}
-          {!!streak && (
-            <span title="Any day you reviewed or skipped something keeps the streak going.">
-              {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
-            </span>
-          )}
-          {weeklyRecap &&
-            ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
-        </span>
+        {/* Today's numbers belong to the Due tab only; on All items, Admin
+            and Account they were noise about a different screen. */}
+        {view === 'due' && (
+          <span className="text-sm text-almanac-mute">
+            {/* "left", not "due": anything already reviewed/skipped today has
+                dropped off this list, so this is the remainder -- History's
+                "x of y handled" counts the same day's full workload. */}
+            {dueItems.length} left today
+            {/* NOT "completion": this is reviewed / (reviewed + skipped) across the
+                actions you logged. It has no idea what was due, so it can't be a
+                completion rate -- review 3 items all year and skip nothing and it
+                reads 100%. Items you never opened write no row and are invisible
+                here, by the same limitation as the history grid's legend. */}
+            {completionRate !== null && (
+              <span title="Of the actions you logged this year, this share were reviews rather than skips. It can't count items you never opened -- nothing is recorded for those.">
+                {` · ${completionRate}% reviewed rather than skipped this year`}
+              </span>
+            )}
+            {!!streak && (
+              <span title="Any day you reviewed or skipped something keeps the streak going.">
+                {` · ${streak} day${streak === 1 ? '' : 's'} streak`}
+              </span>
+            )}
+            {weeklyRecap &&
+              ` · ${weeklyRecap.thisWeekCount} handled this week (${weeklyRecap.rangeLabel}), ${weeklyRecap.verb} ${weeklyRecap.lastWeekCount} by this point last week`}
+          </span>
+        )}
       </div>
+
+      {readOnly && (
+        <p className="m-0 text-sm text-almanac-ink bg-almanac-panel border border-almanac-accent rounded-lg px-4 py-3">
+          This is the demo account. It is read-only: you can look around, but you can&apos;t add, review or change
+          items.
+        </p>
+      )}
 
       {/* Hidden until we know who we are: goalKey needs the real user id, so a
           goal typed while /auth/me is still in flight -- or while it's failing
           with a 5xx, which App.jsx keeps the session alive through -- would save
           under 'dailyGoal:anon' and silently vanish on the next good load. */}
-      {user?.id && (
+      {user?.id && view === 'due' && (
         <div className="flex items-center gap-4 flex-wrap">
           <label className="flex items-center gap-2 text-sm text-almanac-mute">
             Daily goal
@@ -291,7 +335,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         <button type="button" className={tabClass(view === 'due')} onClick={() => setView('due')}>
           Due today
         </button>
@@ -310,29 +354,43 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
       {view !== 'admin' && view !== 'account' && (
         <>
-          <form onSubmit={handleAddItem} className="flex gap-2.5">
-            <input
-              type="text"
-              placeholder="What did you learn?"
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              required
-              className="flex-1 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
-            />
-            <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
-              <button type="button" onClick={() => setNewItemMode('FIXED')} className={modePillClass(newItemMode === 'FIXED')}>
-                Fixed
+          <form onSubmit={handleAddItem} className="flex flex-wrap sm:flex-nowrap gap-2.5">
+            {/* A disabled fieldset disables every control inside it at once.
+                display: contents keeps the form's flex layout as it was. */}
+            <fieldset disabled={readOnly} className="contents">
+              <input
+                type="text"
+                placeholder="What did you learn?"
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                required
+                className={`basis-full sm:basis-auto flex-1 min-w-0 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg${DISABLED}`}
+              />
+              <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  aria-pressed={newItemMode === 'FIXED'}
+                  onClick={() => setNewItemMode('FIXED')}
+                  className={modePillClass(newItemMode === 'FIXED')}
+                >
+                  Fixed
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={newItemMode === 'ADAPTIVE'}
+                  onClick={() => setNewItemMode('ADAPTIVE')}
+                  className={modePillClass(newItemMode === 'ADAPTIVE')}
+                >
+                  Adaptive
+                </button>
+              </div>
+              <button
+                type="submit"
+                className={`rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer flex-shrink-0${DISABLED}`}
+              >
+                Add item
               </button>
-              <button type="button" onClick={() => setNewItemMode('ADAPTIVE')} className={modePillClass(newItemMode === 'ADAPTIVE')}>
-                Adaptive
-              </button>
-            </div>
-            <button
-              type="submit"
-              className="rounded-lg px-4 py-2.5 text-sm font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer flex-shrink-0"
-            >
-              Add item
-            </button>
+            </fieldset>
           </form>
           {addedMessage && <p className="text-sm text-almanac-accent">{addedMessage}</p>}
           {error && <p className="text-sm text-almanac-danger">{error}</p>}
@@ -341,37 +399,45 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
       {view === 'due' ? (
         dueItems.length === 0 ? (
-          <p className="text-sm text-almanac-mute">Nothing due today.</p>
+          hasItems === false ? (
+            <div className="text-sm text-almanac-mute flex flex-col gap-1">
+              <p className="m-0 text-almanac-ink">Nothing here yet. Add one thing you learned today, in the box above.</p>
+              <p className="m-0">
+                Fixed: it comes back after 2 days, then 7, then 30, counted from each review. Adaptive: it is due
+                today. Grade how well you remembered it, and the next date adapts to you.
+              </p>
+            </div>
+          ) : hasItems === null ? null : (
+            <p className="text-sm text-almanac-mute">
+              Nothing due today. You are done. Upcoming reviews are under All items.
+            </p>
+          )
         ) : (
           <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
             {dueItems.map((item) => (
-              <li
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  if (!e.target.closest('button')) setSelectedId(item.id);
-                }}
-                onKeyDown={(e) => {
-                  if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button')) {
-                    e.preventDefault();
-                    setSelectedId(item.id);
-                  }
-                }}
-                className={ITEM_ROW_CLASS}
-              >
-                <div>
-                  <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.text}</p>
-                  <span className="text-xs text-almanac-mute">{itemStatusLabel(item)}</span>
+              <li key={item.id} className={ITEM_ROW_CLASS}>
+                <div className="min-w-0 break-words">
+                  <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
+                    <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
+                      {item.text}
+                    </Link>
+                  </p>
+                  <span className="text-xs text-almanac-mute">
+                    {itemStatusLabel(item)}
+                    {overdueLabel(item.nextReviewDate, today) && (
+                      <span className="text-almanac-danger"> · {overdueLabel(item.nextReviewDate, today)}</span>
+                    )}
+                  </span>
                 </div>
-                <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+                <div className="relative z-10 flex gap-2 flex-wrap sm:flex-shrink-0 sm:justify-end">
                   {item.mode === 'ADAPTIVE' ? (
                     GRADES.map((grade) => (
                       <button
                         key={grade}
                         type="button"
                         onClick={() => handleReview(item.id, grade)}
-                        className="rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                        disabled={readOnly}
+                        className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                       >
                         {GRADE_LABELS[grade]}
                       </button>
@@ -380,7 +446,8 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                     <button
                       type="button"
                       onClick={() => handleReview(item.id)}
-                      className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer"
+                      disabled={readOnly}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold bg-almanac-accent text-almanac-bg border-0 cursor-pointer${DISABLED}`}
                     >
                       Review
                     </button>
@@ -388,7 +455,8 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                   <button
                     type="button"
                     onClick={() => handleSkip(item.id)}
-                    className="rounded-lg px-3 py-1.5 text-xs bg-transparent text-almanac-ink border border-almanac-border cursor-pointer"
+                    disabled={readOnly}
+                    className={`rounded-lg px-3 py-1.5 text-xs bg-transparent text-almanac-ink border border-almanac-border cursor-pointer${DISABLED}`}
                   >
                     Skip
                   </button>
@@ -416,7 +484,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
               </select>
             </label>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <label className="flex items-center gap-2 text-sm text-almanac-ink">
                 <input
                   type="checkbox"
@@ -442,23 +510,18 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
           ) : (
             <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
               {allItems.map((item) => (
-                <li
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedId(item.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedId(item.id);
-                    }
-                  }}
-                  className={ITEM_ROW_CLASS}
-                >
-                  <div>
-                    <p className="m-0 mb-1 whitespace-pre-wrap text-sm">{item.preview}</p>
+                <li key={item.id} className={ITEM_ROW_CLASS}>
+                  <div className="min-w-0 break-words">
+                    <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
+                      <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
+                        {item.preview}
+                      </Link>
+                    </p>
                     <span className="text-xs text-almanac-mute">
                       {itemStatusLabel(item)} · next review {item.nextReviewDate}
+                      {!item.isComplete && overdueLabel(item.nextReviewDate, today) && (
+                        <span className="text-almanac-danger"> · {overdueLabel(item.nextReviewDate, today)}</span>
+                      )}
                     </span>
                   </div>
                 </li>
@@ -480,5 +543,24 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         <AccountPanel token={token} onTokenRefresh={onTokenRefresh} />
       )}
     </div>
+  );
+
+  // Dashboard stays mounted while an item is open (App.jsx routes "/*" here),
+  // so its tab, page and filter survive the trip to the item and Back.
+  return (
+    <Routes>
+      <Route
+        path="items/:id"
+        element={
+          <ItemDetail
+            token={token}
+            readOnly={readOnly}
+            onChanged={view === 'due' ? refreshDueItems : refreshAllItems}
+          />
+        }
+      />
+      <Route index element={listView} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
