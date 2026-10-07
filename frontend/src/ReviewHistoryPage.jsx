@@ -152,18 +152,28 @@ export default function ReviewHistoryPage({ token }) {
           </div>
         )}
 
-        <div className="flex items-center gap-2.5 mt-6 flex-wrap text-xs text-almanac-mute">
-          <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
-          {/* Not "all reviewed": a full moon only means every logged action that
-              day was a review. Items you never touched leave no row at all, so
-              they can't be counted here. */}
-          <span>Reviewed, no skips</span>
-          <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border ml-3" style={mixedShadow} />
-          <span>Mixed (some skipped)</span>
-          <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute ml-3" />
-          <span>No activity</span>
-          <span className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-border ml-3" />
-          <span>Upcoming</span>
+        {/* Each icon + label pair is one flex item, so wrapping on a phone
+            never splits an icon from its label. */}
+        <div className="flex items-center gap-x-5 gap-y-2 mt-6 flex-wrap text-xs text-almanac-mute">
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-almanac-accent border border-almanac-accent" />
+            {/* Not "all reviewed": a full moon only means every logged action that
+                day was a review. Items you never touched leave no row at all, so
+                they can't be counted here. */}
+            <span>Reviewed, no skips</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-almanac-moon-dark border border-almanac-border" style={mixedShadow} />
+            <span>Mixed (some skipped)</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full border border-almanac-mute" />
+            <span>No activity</span>
+          </span>
+          <span className="flex items-center gap-2.5">
+            <span className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-mute opacity-50" />
+            <span>Upcoming</span>
+          </span>
         </div>
       </div>
     </div>
@@ -219,7 +229,7 @@ function DayCell({ day, entry, description, isFuture, isSelected, onSelect }) {
   if (isFuture) {
     return (
       <div className="flex flex-col items-center gap-0.5 flex-none" title="Upcoming">
-        <div className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-border" />
+        <div className="w-3.5 h-3.5 rounded-full border border-dashed border-almanac-mute opacity-50" />
         <span className="text-[0.58rem] text-almanac-mute tabular-nums opacity-50">{day}</span>
       </div>
     );
