@@ -117,31 +117,35 @@ if you miss it.
 
 ## The "History" tab
 
-A calendar of everything you've done, drawn as moon phases.
+A calendar of everything you've done, one circle per day.
 
-**Today's moon** sits at the top with a count like "1 of 5 handled". This is
+**Today's circle** sits at the top with a count like "1 of 5 handled". This is
 today's *whole* workload — everything due, including anything overdue — so it
 won't match the "left today" number on the other tab, which is only what
-remains. The moon fills up as you work: an empty circle at the start of the
-day, a full gold one when you've handled everything.
+remains. The circle fills up as you work: empty at the start of the day, fully
+filled when you've handled everything.
 
 This is the only true percentage in the app. It works for today because today
 is the only day where the app can still see what was due.
 
 **The grid below** shows one row per month, one circle per day:
 
-- **Full moon** — you reviewed that day and skipped nothing.
-- **Half moon** — a skip was involved that day, on its own or alongside
-  reviews.
-- **Empty outline** — no activity recorded.
+- **Filled circle** — you reviewed that day and skipped nothing.
+- **Half-filled circle** — you skipped at least one item that day, on its own
+  or alongside reviews. Skipping is fine.
+- **Empty ring** — no activity recorded.
+- **Faint dashed ring** — a day that hasn't happened yet.
 
-Hover any day to see its date and exact review and skip counts.
+Tap or click any past day to see its exact review and skip counts, shown
+under that month. Tap it again to hide them. (On a computer, hovering also
+shows them.)
 
-One honest limitation, worth understanding: a full moon means *everything you
-logged that day was a review*. It does **not** mean you got through everything
-that was due. If four items were due and you reviewed one and ignored the rest,
-that day still shows a full moon, because ignoring an item records nothing at
-all. The app can't reconstruct what was due on a past day.
+One honest limitation, worth understanding: a filled circle means *everything
+you logged that day was a review*. It does **not** mean you got through
+everything that was due. If four items were due and you reviewed one and
+ignored the rest, that day still shows a filled circle, because ignoring an
+item records nothing at all. The app can't reconstruct what was due on a past
+day.
 
 Use the **arrows** beside the year to look at previous years. The "today"
 card at the top doesn't change when you do — it's always about today.
@@ -176,10 +180,14 @@ press it, the app follows whatever your operating system is set to.
 ## Admin features (admin accounts only)
 
 If you're logged in as an admin, you'll see an extra **Admin** tab: a list of
-every user, with a button to **Suspend** or **Unsuspend** each one. A
-suspended user can't log in — even a token they already had stops working
-immediately. You can't suspend yourself (the button is hidden on your own
-row).
+every user, with a button to **Suspend** or **Unsuspend** each one. Both ask
+you to confirm first, in a box that names the user's email. Press **Esc**,
+**Cancel**, or click outside the box to back out. A suspended user can't log
+in — even a token they already had stops working immediately.
+
+Two rows have no Suspend button: your own (marked "You") and the public demo
+account (marked "Demo"), so nobody can lock the demo account by accident. The
+server refuses both, even if someone calls the API directly.
 
 ## Frequently asked
 
@@ -207,8 +215,8 @@ Both. The streak counts a skip as showing up; the percentage counts it as not
 reviewing. Turning up every day and skipping often produces exactly this.
 
 **Does skipping hurt me?**
-Only in the sense that a skip is recorded as a skip: it shows as a half moon
-for that day and counts against your reviewed-rather-than-skipped share. It
+Only in the sense that a skip is recorded as a skip: it shows as a half-filled
+circle for that day and counts against your reviewed-rather-than-skipped share. It
 does not lose your progress, break your streak, or change which review stage
 an item is on.
 

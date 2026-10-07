@@ -169,7 +169,7 @@ failed set for inspection).
 | POST | `/api/v1/items/:id/skip` | user | `{ date }`, pushes due date by 1 day |
 | GET | `/api/v1/export` | user | `?includeDeleted=true\|false` |
 | GET | `/api/v1/admin/users` | admin | paginated |
-| POST | `/api/v1/admin/users/:id/suspend` | admin | can't suspend self |
+| POST | `/api/v1/admin/users/:id/suspend` | admin | can't suspend self (`CANNOT_SUSPEND_SELF`) or the demo account (`CANNOT_SUSPEND_DEMO`), both 403 |
 | POST | `/api/v1/admin/users/:id/unsuspend` | admin | |
 
 Every error response uses one shape: `{ "error": { "message", "code" } }`.
