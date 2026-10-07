@@ -17,8 +17,8 @@ async function processJob(job) {
   await transporter.sendMail({
     from: process.env.GMAIL_USER,
     to: email,
-    subject: 'Welcome to Spaced Repetition Review Tracker',
-    text: 'Thanks for signing up! Start adding items and we\'ll help you review them on the 2-7-30 schedule.',
+    subject: 'Welcome to Interval',
+    text: 'Thanks for signing up to Interval! Start adding items and we\'ll tell you when to review each one: on the Fixed 2-7-30 schedule, or on an Adaptive schedule that follows how well you remember it.',
   });
   console.log(`Sent welcome email to ${email}`);
 }

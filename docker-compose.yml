@@ -14,6 +14,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Cap memory so Redis can't grow without limit. The policy MUST stay
+    # "noeviction": this one Redis also holds the BullMQ email queue, and
+    # BullMQ needs every key it writes to stay (an evicted job or job lock is
+    # a lost or duplicated email; BullMQ warns at startup otherwise). When
+    # full, Redis refuses new writes instead: the due-items cache write
+    # already ignores that error, and cache keys expire on their own (EX).
+    command: ['redis-server', '--maxmemory', '128mb', '--maxmemory-policy', 'noeviction']
     ports:
       - '6379:6379'
     volumes:
