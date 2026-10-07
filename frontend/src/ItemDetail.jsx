@@ -37,23 +37,19 @@ export default function ItemDetail({ token, readOnly, onChanged }) {
   // The action waiting for a yes/no in the dialog: 'delete', 'reset', 'switch', or null.
   const [pending, setPending] = useState(null);
 
+  // Ask for the item and its curve at the same time, not one after the other
+  // (U19): each request is a slow round trip on prod. We don't know the mode
+  // yet, so the server answers { points: [] } when there's no curve. Only an
+  // Adaptive item with a graded review (stability set) shows one -- see the
+  // render below. Reset and Switch both clear stability, so no refetch is needed.
   useEffect(() => {
     getItem(token, itemId)
       .then(setItem)
       .catch((err) => setError(err.message));
+    getRetrievabilityCurve(token, itemId)
+      .then(setCurve)
+      .catch((err) => setError(err.message));
   }, [token, itemId]);
-
-  // Only an Adaptive item that's had at least one graded review has a real
-  // stability to plot -- fetch the curve only then (see item.mode/stability
-  // above; a brand-new/reset Adaptive item has stability: null and gets no
-  // curve at all, never a flat mocked one).
-  useEffect(() => {
-    if (item?.mode === 'ADAPTIVE' && item.stability != null) {
-      getRetrievabilityCurve(token, itemId)
-        .then(setCurve)
-        .catch((err) => setError(err.message));
-    }
-  }, [token, itemId, item?.mode, item?.stability]);
 
   // location.key is 'default' only on the first page of this tab's visit
   // (a refresh or a shared link). Going -1 there would leave the app, so go

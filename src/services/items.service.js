@@ -126,11 +126,11 @@ async function switchItemMode(userId, id, { mode, date, finalIntervalDays }) {
 // unreviewed Adaptive one is a rejected state, not a flat/defaulted line.
 async function getRetrievabilityCurve(userId, id, date) {
   const item = await getItemById(userId, id);
-  if (item.mode !== 'ADAPTIVE') {
-    throw new AppError(400, 'ITEM_NOT_ADAPTIVE', 'Only Adaptive items have a retrievability curve');
-  }
-  if (item.stability == null) {
-    throw new AppError(409, 'NO_REVIEW_HISTORY', 'Item has no review history yet');
+  // A Fixed item, or an Adaptive one with no graded review yet, has no curve.
+  // That's a normal answer, not an error: the item page asks for the curve at
+  // the same time as the item, before it knows the mode.
+  if (item.mode !== 'ADAPTIVE' || item.stability == null) {
+    return { points: [] };
   }
 
   const elapsedDays = date ? daysBetween(item.lastReviewDate, parseDate(date)) : null;
