@@ -9,7 +9,7 @@ const chromeButtonClass =
 // The one bar every screen shares -- brand, nav, the light/dark override,
 // and logout -- so they're reachable no matter which screen is on top
 // (previously ItemDetail had none of these, see developer-handover.md §10b).
-export default function AlmanacShell({ onToggleMode, loggedIn, onLogout, children }) {
+export default function AlmanacShell({ onToggleMode, loggedIn, email, onLogout, children }) {
   return (
     <div className="min-h-screen bg-almanac-bg text-almanac-ink font-body transition-colors">
       <header className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2 px-5 py-3 bg-almanac-panel border-b border-almanac-border">
@@ -35,13 +35,28 @@ export default function AlmanacShell({ onToggleMode, loggedIn, onLogout, childre
               </NavLink>
             </>
           )}
-          <button type="button" onClick={onToggleMode} className={chromeButtonClass}>
+          <button
+            type="button"
+            onClick={onToggleMode}
+            aria-label="Switch light/dark mode"
+            className={chromeButtonClass}
+          >
             &#9728; / &#9790;
           </button>
           {loggedIn && (
-            <button type="button" onClick={onLogout} className={chromeButtonClass}>
-              Log out
-            </button>
+            // Email sits next to "Log out" so it reads as "who you'd log out".
+            // A long address is cut with "…" instead of widening the header
+            // on a phone; the full text stays in the hover title.
+            <span className="flex items-center gap-x-3 min-w-0">
+              {email && (
+                <span title={email} className="text-almanac-mute truncate max-w-[24ch] sm:max-w-[32ch]">
+                  {email}
+                </span>
+              )}
+              <button type="button" onClick={onLogout} className={chromeButtonClass}>
+                Log out
+              </button>
+            </span>
           )}
         </div>
       </header>
