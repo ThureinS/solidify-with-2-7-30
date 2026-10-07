@@ -78,6 +78,24 @@ npm run seed
 
 API docs (Swagger UI, every endpoint with an example): `GET /api/v1/docs`.
 
+Proof that the database indexes are used (`EXPLAIN ANALYZE` plans, read in
+plain language): [`docs/query-plans.md`](./docs/query-plans.md).
+
+### Safety limits
+
+- **Postgres statement timeout: 10 s.** Postgres cancels any single SQL
+  statement that runs longer than that, and the API returns a normal 500
+  error. Every real query takes a few milliseconds, so only a broken query
+  hits it. Locally it is set in the pool config in `src/lib/prisma.js`. On
+  Neon's pooled URL it can't be set there, so it is set on the database role
+  instead (see "Deploying", step 4).
+- **Redis memory limit: 128 MB, policy `noeviction`** (`docker-compose.yml`).
+  The same Redis holds the BullMQ email queue, and BullMQ needs
+  `noeviction`: an evicted (deleted to free memory) job is a lost email.
+  When Redis is full, it refuses new writes instead. The due-items cache
+  write ignores that error, and cache keys expire on their own. Run
+  `docker compose up -d redis` once to apply the limit to an existing container.
+
 ### Email queue (optional)
 
 The welcome-email worker needs a real Gmail account to actually send mail.
@@ -110,16 +128,28 @@ failed set for inspection).
    ```bash
    DATABASE_URL_UNPOOLED="<paste Neon's direct connection string>" npx prisma migrate deploy
    ```
-4. Deploy. Vercel auto-detects the Express app straight from `src/app.js`
+4. Set the 10 s statement timeout on the database role, once, in Neon's SQL
+   Editor. Find the role name with `SELECT current_user;`, then run:
+   ```sql
+   ALTER ROLE <your_role> SET statement_timeout = '10s';
+   ```
+   Why here and not in code: Neon's pooled URL goes through PgBouncer.
+   Neon's PgBouncer config accepts only one extra connection setting
+   (`extra_float_digits`) and refuses the rest, so
+   `src/lib/prisma.js` leaves it out when the host contains `-pooler`. A role
+   setting applies to every new session of that role, pooled or direct. It
+   also covers `prisma migrate deploy`; raise it for that session if a large
+   migration ever needs more than 10 s per statement.
+5. Deploy. Vercel auto-detects the Express app straight from `src/app.js`
    (no `vercel.json` or extra entry file needed for the standard case).
-5. Verify on the deployed URL, in order: `/api/v1/health` → register → login
+6. Verify on the deployed URL, in order: `/api/v1/health` → register → login
    → add an item → due queue → review → **open `/api/v1/docs` in a browser
    and confirm it actually renders** (Swagger UI serves static assets via
    `express.static`, which Vercel's docs flag as unsupported in some cases —
    don't assume a 200 on the HTML means the page looks right; if the styling
    is broken, point `swaggerUi.setup()` at a CDN copy of the CSS/JS instead
    of the locally-bundled one).
-6. First request after idle will be slow (cold start) — that's normal.
+7. First request after idle will be slow (cold start) — that's normal.
 
 ## Endpoints
 
