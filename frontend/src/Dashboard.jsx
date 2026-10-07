@@ -30,6 +30,19 @@ function itemStatusLabel(item) {
   return item.isComplete ? 'Archived' : STAGE_LABELS[item.stage];
 }
 
+// "overdue by N days", or '' when not late. Both dates are calendar dates
+// (YYYY-MM-DD); "today" is the client's local date (todayLocal), never the
+// server's clock. Date.UTC turns each into midnight UTC, so the difference
+// is whole days with no time-zone or daylight-saving drift.
+// ponytail: duplicated in ItemDetail, like STAGE_LABELS.
+function overdueLabel(nextReviewDate, today) {
+  const [y1, m1, d1] = nextReviewDate.split('-').map(Number);
+  const [y2, m2, d2] = today.split('-').map(Number);
+  const days = (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000;
+  if (days <= 0) return '';
+  return `overdue by ${days} day${days === 1 ? '' : 's'}`;
+}
+
 // The row is a plain <li>. Its text is a real <Link>, and the link's ::after
 // box is stretched over the whole row (the "stretched link" trick), so a
 // click anywhere opens the item. Buttons sit above that box (relative z-10),
@@ -235,6 +248,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
     }
   }
 
+  const today = todayLocal();
   const listView = (
     <div className="flex flex-col gap-6">
       <div>
@@ -383,7 +397,12 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                       {item.text}
                     </Link>
                   </p>
-                  <span className="text-xs text-almanac-mute">{itemStatusLabel(item)}</span>
+                  <span className="text-xs text-almanac-mute">
+                    {itemStatusLabel(item)}
+                    {overdueLabel(item.nextReviewDate, today) && (
+                      <span className="text-almanac-danger"> · {overdueLabel(item.nextReviewDate, today)}</span>
+                    )}
+                  </span>
                 </div>
                 <div className="relative z-10 flex gap-2 flex-wrap sm:flex-shrink-0 sm:justify-end">
                   {item.mode === 'ADAPTIVE' ? (
@@ -472,6 +491,9 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                     </p>
                     <span className="text-xs text-almanac-mute">
                       {itemStatusLabel(item)} · next review {item.nextReviewDate}
+                      {!item.isComplete && overdueLabel(item.nextReviewDate, today) && (
+                        <span className="text-almanac-danger"> · {overdueLabel(item.nextReviewDate, today)}</span>
+                      )}
                     </span>
                   </div>
                 </li>
