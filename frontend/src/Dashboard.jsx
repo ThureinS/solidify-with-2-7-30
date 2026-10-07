@@ -35,8 +35,10 @@ function itemStatusLabel(item) {
 // click anywhere opens the item. Buttons sit above that box (relative z-10),
 // so they still get their own clicks. Screen readers see one link plus
 // separate buttons, instead of buttons nested inside a fake button.
+// Below 640px (Tailwind's sm) the text sits above the buttons, so a row of
+// five grade buttons can't squeeze the text into a 1-2 word column.
 const ITEM_ROW_CLASS =
-  'relative flex justify-between items-start gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:border-almanac-accent';
+  'relative flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:border-almanac-accent';
 const ITEM_LINK_CLASS =
   "text-almanac-ink no-underline outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']";
 
@@ -287,7 +289,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         <button type="button" className={tabClass(view === 'due')} onClick={() => setView('due')}>
           Due today
         </button>
@@ -306,14 +308,14 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
 
       {view !== 'admin' && view !== 'account' && (
         <>
-          <form onSubmit={handleAddItem} className="flex gap-2.5">
+          <form onSubmit={handleAddItem} className="flex flex-wrap sm:flex-nowrap gap-2.5">
             <input
               type="text"
               placeholder="What did you learn?"
               value={newText}
               onChange={(e) => setNewText(e.target.value)}
               required
-              className="flex-1 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
+              className="basis-full sm:basis-auto flex-1 min-w-0 px-3.5 py-2.5 text-sm text-almanac-ink bg-almanac-panel border border-almanac-border rounded-lg"
             />
             <div className="flex items-center border border-almanac-border rounded-full p-0.5 flex-shrink-0">
               <button type="button" onClick={() => setNewItemMode('FIXED')} className={modePillClass(newItemMode === 'FIXED')}>
@@ -342,7 +344,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
           <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
             {dueItems.map((item) => (
               <li key={item.id} className={ITEM_ROW_CLASS}>
-                <div>
+                <div className="min-w-0 break-words">
                   <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
                     <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
                       {item.text}
@@ -350,7 +352,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
                   </p>
                   <span className="text-xs text-almanac-mute">{itemStatusLabel(item)}</span>
                 </div>
-                <div className="relative z-10 flex gap-2 flex-shrink-0 flex-wrap justify-end">
+                <div className="relative z-10 flex gap-2 flex-wrap sm:flex-shrink-0 sm:justify-end">
                   {item.mode === 'ADAPTIVE' ? (
                     GRADES.map((grade) => (
                       <button
@@ -402,7 +404,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
               </select>
             </label>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <label className="flex items-center gap-2 text-sm text-almanac-ink">
                 <input
                   type="checkbox"
@@ -429,7 +431,7 @@ export default function Dashboard({ token, user, onTokenRefresh }) {
             <ul className="list-none p-0 m-0 flex flex-col gap-2.5">
               {allItems.map((item) => (
                 <li key={item.id} className={ITEM_ROW_CLASS}>
-                  <div>
+                  <div className="min-w-0 break-words">
                     <p className="m-0 mb-1 whitespace-pre-wrap text-sm">
                       <Link to={`/items/${item.id}`} className={ITEM_LINK_CLASS}>
                         {item.preview}
