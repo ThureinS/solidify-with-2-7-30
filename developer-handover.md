@@ -33,7 +33,7 @@ original spec — see §9 below for how that relates to what's actually built).
 | Local infra | Docker Compose (Postgres, Redis, the email worker) | API/frontend still run on the host via `nodemon`/`vite` |
 | Tests | Vitest | Pure-function scheduling logic only — no DB in CI |
 | CI | GitHub Actions | checkout → Node 22 → `npm ci` → `npm test` (`prisma generate` runs via `postinstall`) |
-| Prod DB | Neon Postgres | Pooled `DATABASE_URL` for runtime, unpooled `DATABASE_URL_UNPOOLED` for migrations |
+| Prod DB | Neon Postgres | Pooled `DATABASE_URL` for runtime, unpooled `DATABASE_URL_UNPOOLED` for migrations; 10 s statement timeout on the `neondb_owner` role (§12c) |
 | Prod hosting (API) | Vercel (serverless, zero-config Express detection) | Auto-deploys on push to `main` |
 | Frontend | React + Vite, separate Vercel project | Isolated `package.json`, not in backend CI |
 
@@ -159,6 +159,21 @@ auth.service.js registerUser()          worker.js (separate process)
   **not** pick up new `.env` values — `env_file` is only read when a
   container is *created*. Use `docker compose up -d --force-recreate
   worker` after changing `GMAIL_USER`/`GMAIL_APP_PASSWORD`.
+- **Second gotcha: old jobs wait in Redis.** Test sign-ups made while no
+  worker runs still add a job. The `redis_data` volume keeps those jobs, so
+  the next worker start sends all of them at once, from the real Gmail
+  account. This happened on 2026-10-07: 6 old test jobs went to
+  `@example.com` addresses, and each one bounced back to the Gmail inbox.
+  Before you start the worker, check `redis-cli LLEN bull:emails:wait`.
+  Remove unwanted jobs with BullMQ's `job.remove()`.
+- **Redis memory limit: 128 MB, policy `noeviction`** (`docker-compose.yml`,
+  2026-10-07). The policy must stay `noeviction`, because this one Redis
+  holds both the cache and the queue. An evicting policy could delete job or
+  job-lock keys, which means lost or duplicate emails, and BullMQ warns at
+  startup. When Redis is full, it refuses writes instead: the due-items
+  cache write ignores the error, and a failed enqueue is only logged. A
+  separate cache-only Redis would be cleaner, but it isn't worth it while
+  prod has no Redis.
 - **Not deployed live** — no free host runs a persistent process
   (Railway/Render/Fly + a managed Redis like Upstash would all be paid,
   ~$5/mo). The code is correct either way: with no `REDIS_URL`, registration
@@ -751,3 +766,35 @@ revocation is, in practice, already solved the simple way. Refresh tokens
 partly re-solve a problem this app does not currently have. That is a fine
 reason to build them as a learning exercise — it is not a good reason to
 describe them as fixing something.
+
+### 12c. Index proof and safety limits (lane LE, 2026-10-07)
+
+**Index proof (graded).** `docs/query-plans.md` holds `EXPLAIN (ANALYZE,
+BUFFERS)` plans from the local Docker database, never prod, together with a
+plain-language reading of each plan. The SQL is the real SQL from Prisma's
+query log. With 100,000 items, the due-items query uses
+`items_userId_nextReviewDate_idx`: 0.049 ms and 7 pages, against 9.4 ms and
+1,924 pages for a forced Seq Scan. Item detail and the review calendar use
+`reviews_itemId_date_idx`.
+
+**Statement timeout: 10 s.** Postgres cancels any statement that runs longer
+than 10 s (error 57014), and the API returns the normal 500.
+- **Local and direct URLs:** `src/lib/prisma.js` sets `statement_timeout`
+  in the pg pool config.
+- **Neon's pooled URL** (host contains `-pooler`): the code leaves the
+  setting out. Neon's PgBouncer accepts only `extra_float_digits` as a
+  startup parameter, so sending the timeout could break every connection.
+- **Prod:** the limit is set on the role instead. On 2026-10-07 the user ran
+  `ALTER ROLE neondb_owner SET statement_timeout = '10s';` in the Neon SQL
+  Editor (project `neon-coquelicot-leaf`, branch `main`, database
+  `neondb`). The result was verified with `rolconfig =
+  {statement_timeout=10s}`.
+- **Vercel check:** prod's `DATABASE_URL` host is
+  `ep-late-smoke-avs33hmc-pooler…`, so the code guard applies there.
+- **Undo:** `ALTER ROLE neondb_owner RESET statement_timeout;`.
+- **Migrations:** the role setting also limits `prisma migrate deploy`. If a
+  large migration fails with error 57014, this limit is the cause.
+- **Still open:** this change isn't deployed yet. After the next push,
+  check `/health`, log in, and load the due items on the live API.
+
+**Redis memory limit.** See §6.
