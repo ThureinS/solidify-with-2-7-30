@@ -51,7 +51,7 @@ function overdueLabel(nextReviewDate, today) {
 // Below 640px (Tailwind's sm) the text sits above the buttons, so a row of
 // five grade buttons can't squeeze the text into a 1-2 word column.
 const ITEM_ROW_CLASS =
-  'relative flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:border-almanac-accent';
+  'relative flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4 bg-almanac-panel border border-almanac-border rounded-2xl px-5 py-4 hover:border-almanac-accent has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-almanac-accent';
 const ITEM_LINK_CLASS =
   "text-almanac-ink no-underline outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']";
 
