@@ -3484,3 +3484,204 @@ correctly), same reasoning as trusting `deleteItem`'s existing
 3. Why did `nivoTheme.js` end up being a reason to keep the `almanac-*`
    token names during a full palette rebrand, when the file has nothing
    to do with color names as text?
+
+## 2026-08-27 — Deploying the production pivot (written up 2026-10-07)
+
+This session was not logged on the day. This entry was added later, from
+the session notes.
+
+**What happened.** The five pivot steps (schedule modes, decay curve, demo
+route, stats dashboard, Interval rebrand) had stayed on local `main` on
+purpose, so they would arrive live together. This session shipped them:
+
+1. **Rotated the Neon password** (the third rotation). It closed an older
+   exposure from 2026-08-03. Steps: Vercel → Storage → Neon console →
+   reset the `neondb_owner` role → redeploy on Vercel.
+2. **Pushed `main`** (`6289c96..e2d4468`). Both Vercel projects redeployed
+   from the same push.
+3. **Ran `prisma migrate deploy` against prod** for step 1's
+   `add_schedule_modes` migration. The user ran it in their own terminal.
+4. **Verified live:** login returned a real token. `GET /items/due` and
+   `GET /items/stats` returned the new mode-aware shape. The page title
+   said Interval.
+
+**Problems and how they were solved**
+
+- **The first redeploy still failed login with a 500.** It started before
+  Vercel had copied the new password into its environment variables.
+  `/health` stayed 200 the whole time, because it doesn't touch the
+  database. A second redeploy fixed it. Lesson: after a password change,
+  test with a real login, not `/health`.
+- **`prisma migrate deploy` failed with `P1001` (can't reach server)**,
+  though the connection string was right. Node tried a slow IPv6 route on
+  this network first. Fix: put `NODE_OPTIONS="--dns-result-order=ipv4first"`
+  in front of the same command.
+- **The new password was pasted into chat twice** while debugging that
+  error. It was rotated again the same day and checked with a real login.
+  Since then, every command that uses a secret comes with a warning up
+  front: don't paste the command or its output.
+
+**New concepts**
+
+- **Database migration on prod:** applying the schema change files in
+  `prisma/migrations` to the live database. The code and the database must
+  agree, so it runs together with the deploy.
+- **IPv4 vs IPv6 order:** a computer can reach a server by two address
+  types. If one route is broken, preferring the other can fix "can't
+  reach" errors.
+
+**You should be able to explain**
+
+1. Why did `/health` say everything was fine while login was broken?
+2. Why must `prisma migrate deploy` run when new code expects new columns?
+
+## 2026-10-07 — A live UI review, fixed in six parallel lanes
+
+**Why this session happened.** A click-through of the live app (logged
+out, demo, admin; desktop and a 390 px phone; light and dark) found 19
+UI problems (U1–U19). The instructor's checklist also still lacked proof
+that the database indexes work. All of it went into a private checklist,
+`todo.md` (gitignored).
+
+**How the work was split.** Doing the tasks one by one would take about
+11 hours. Instead, the work was split into **lanes**: one Claude session
+per lane, each on its own git branch in its own **worktree** (a second
+folder checked out from the same repository). Lanes were split by
+**files**, so two lanes never edited the same file, and merges had no
+conflicts. The main session reviewed each lane, merged it, and ran the
+tests after every merge.
+
+**What was built, by lane**
+
+- **L0** (`4265039`, pushed early because the public demo link was dead):
+  a `frontend/vercel.json` rewrite, so direct links like `/demo` no longer
+  give a 404 (U1). Error messages use the red `almanac-danger` colour, not
+  the teal accent (U6).
+- **LB, auth and header** (`07664a5`): the theme toggle follows what you
+  see and is saved (U4). An expired session shows a loading state instead
+  of a fake empty dashboard (U5). The header shows your email (U16a). The
+  login/register form is cleaned up (U15). A "Try the demo" link (U12).
+- **LC, charts and stats** (`d2c7810`): `GET /items/stats` now fills
+  weeks with no activity with 0, and the chart draws straight steps, not
+  smooth curves (U8, ADR 0003). Chart labels no longer overlap (U3). Every
+  endpoint now rejects impossible dates such as `2026-02-30`. LC also found
+  why the decay curve was slow (U19, see below).
+- **LE, backend** (`a128182`): the index proof (task 1, see below). The
+  welcome email says Interval (task 3). A 10-second Postgres statement
+  timeout (task 5). A 128 MB Redis limit with `noeviction` (task 6).
+- **LA, dashboard and item page** (`865ddfe`): item detail has its own URL,
+  `/items/:id`, so Back, refresh and sharing work (U11). The dashboard fits
+  a phone (U2). The Fixed/Adaptive picker looks right in dark mode (U18).
+  New users see how the app works (U17). Late items say "overdue by N days"
+  (U7). Item history shows the Adaptive grade (U10). The demo account says
+  it is read-only up front (U13). The daily goal shows only on the Due tab
+  (U16b).
+- **LD, history and admin** (`406e930`): a reusable `ConfirmDialog` built on
+  the browser's `<dialog>` element. Admin Suspend/Unsuspend asks first. The
+  backend also refuses to suspend the demo account (`CANNOT_SUSPEND_DEMO`).
+  The history page text is rewritten for users (U9, U14 admin part).
+- **LF, follow-up** (`bc0c969`): Delete, Reset and Switch use
+  `ConfirmDialog` instead of `window.confirm` (U14). The item and its curve
+  load at the same time (U19 fix A).
+- **Main session:** the CORS preflight is cached for 10 minutes (U19 fix
+  B). The worker skips welcome emails to `example.com/.net/.org`. Every
+  endpoint is now in `openapi.yaml` and the README. Prod demo data was
+  reseeded.
+
+**The index proof (graded task), in plain words.** `docs/query-plans.md`
+holds real `EXPLAIN (ANALYZE, BUFFERS)` output from the local Docker
+database, never prod. The SQL was captured from Prisma's query log, not
+guessed.
+
+- **With the seed data (29 items), Postgres reads the whole table (Seq
+  Scan).** That is correct: the table fits in one page, so an index would
+  only add work.
+- **With 100,000 items**, the due-items query uses
+  `items_userId_nextReviewDate_idx`: **0.049 ms, 7 pages**. With the index
+  turned off, the same query takes **9.4 ms and reads 1,924 pages**, the
+  whole table. That is about 190 times slower for the same 46 rows.
+- The index covers both conditions in it, `userId` and
+  `nextReviewDate <= today`. The two other conditions (`deletedAt`,
+  `isComplete`) are checked afterwards; they removed only 7 rows, so they
+  don't need to be in the index.
+- The item-detail review list uses `reviews_itemId_date_idx`: 0.013 ms,
+  6 pages. The history calendar uses **both** indexes in a Nested Loop
+  (for each of the user's items, look up its reviews): 0.436 ms.
+- The 100,000 rows were inserted inside a transaction that ended with
+  `ROLLBACK`, so other lanes never saw them, and a check found 0 left over.
+
+**Key decisions and why**
+
+- **Lanes by file, not by feature,** so merges could not conflict. Two
+  lanes that both touched `App.jsx` split it: LB owned the top (state and
+  auth), LA owned the `<Routes>` block.
+- **Empty weeks are 0, not missing** (U8). A missing week made a 9-month
+  break look like one week. Filling with 0 adds rows to the response, so
+  old clients keep working: a second example of a non-breaking API change.
+- **The curve endpoint answers `{ points: [] }`** for a Fixed item or an
+  unreviewed Adaptive item, instead of 400/409. The page now asks for the
+  curve before it knows the mode, and "no curve" is a normal answer, not
+  an error.
+- **The demo account is protected twice:** a confirm box in the admin UI
+  and a check in the backend. A confirm box doesn't stop a direct API call.
+- **The cold start stays** (about 1.5 s extra after a few idle minutes).
+  Moving the server region or keeping it warm was considered and rejected.
+- **The worker skips test domains,** instead of emptying the Gmail
+  variables locally. Test sign-ups still run the whole queue path; only
+  the last step, the real send, is skipped.
+
+**Problems hit and how they were solved**
+
+- **The decay curve took 4–8 s, but the API answered in 0.7 s** (U19).
+  Measured on prod, the cause was not the database. The server is in
+  Washington, and each request first needs a CORS preflight (an extra
+  `OPTIONS` request). The curve request only started after the item
+  request finished. Each of those 4 trips took about 300 ms, or 1.8 s on a
+  cold start. Fixes: cache the preflight (`maxAge: 600`) and send both
+  requests at the same time.
+- **Neon's pooled connection rejects `statement_timeout`.** Its PgBouncer
+  accepts only one startup setting. The code leaves the timeout out on
+  `-pooler` hosts, and the user set it on the database role instead.
+- **6 old test emails were sent at once** when a rebuilt worker started:
+  the jobs had waited in Redis. They bounced back to the Gmail inbox. The
+  worker now skips test domains.
+- **The worker's Docker image would have crashed** after that fix. The
+  image copies only `worker.js`, so the new helper file was missing.
+  Found by building the image and loading the file inside it.
+- **The LF prompt forgot U19 fix A.** Found by re-reading `todo.md` before
+  saying what was left, and sent to the lane as a follow-up.
+- **Docs had drifted:** five endpoints were not documented, and the login
+  example still showed the old single `token`. A linter (Redocly) also
+  found one old YAML error: an unquoted comma made "default 30" a separate
+  field.
+
+**New concepts**
+
+- **Git worktree:** a second working folder for the same repository, on its
+  own branch. Two sessions can work at once without touching each other's
+  files.
+- **EXPLAIN ANALYZE:** Postgres runs a query for real and prints the plan
+  it chose, with real times and row counts.
+- **Seq Scan vs Index Scan:** read the whole table, or jump to the matching
+  rows through the index. On a tiny table, the Seq Scan is the right choice.
+- **CORS preflight:** before a cross-site request with a token, the browser
+  asks the server "may I?" with an `OPTIONS` request. `maxAge` lets the
+  browser remember the answer.
+- **Request waterfall:** one request waits for another to finish before it
+  starts. Two independent requests should start together.
+- **Statement timeout:** the database cancels any single query that runs
+  too long, so one slow query can't hold a connection forever.
+- **`noeviction`:** a Redis rule: when memory is full, refuse new writes
+  instead of deleting old keys. A job queue needs it, because a deleted key
+  is a lost job.
+- **RFC 2606 domains:** `example.com`, `.net` and `.org` are reserved for
+  tests. No real person can own a mailbox there.
+
+**You should be able to explain**
+
+1. Why does Postgres use a Seq Scan on the seed data but the index on
+   100,000 items? Which numbers in `docs/query-plans.md` prove it?
+2. The API answered in 0.7 s, but the curve took 4–8 s. Where did the
+   time go, and what did the two fixes change?
+3. Why was filling empty weeks with 0 a non-breaking change, while
+   changing the curve's 400 to a 200 needed a deploy-order warning?

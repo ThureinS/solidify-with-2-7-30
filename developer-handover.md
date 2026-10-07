@@ -653,6 +653,21 @@ which is per-origin. A goal set on the production URL won't exist on a Vercel
 preview URL or on a phone — set it live during the demo rather than
 pre-setting it.
 
+**Second deploy, 2026-08-27 (production pivot).** Same order as above:
+rotate the Neon password, push `main` (`6289c96..e2d4468`), run
+`prisma migrate deploy` for `add_schedule_modes` from the user's own
+terminal, verify live (real login, `/items/due` and `/items/stats` in the
+new mode-aware shape, Interval in the page title). Two gotchas to expect
+next time:
+- After a password reset, the first Vercel redeploy can still 500 on
+  login, because it starts before the new value reaches the env vars.
+  Redeploy again. Check with a real login; `/health` doesn't touch the DB.
+- `prisma migrate deploy` gave `P1001` with a correct URL: Node picked a
+  broken IPv6 route. Prefix the command with
+  `NODE_OPTIONS="--dns-result-order=ipv4first"`.
+
+The full story is in `implementation-journey.md` ("2026-08-27").
+
 ### 12b. Change password + refresh tokens (decided 2026-08-02)
 
 **Change password: built 2026-08-03.** `POST /auth/change-password`
