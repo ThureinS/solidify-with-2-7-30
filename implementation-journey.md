@@ -3835,3 +3835,75 @@ script's header comment, and this entry.
    personality function need a skip counter on top of "days overdue"?
 3. Why does the walk stop on the seed day and leave some items due,
    instead of completing every schedule and opening with a clean day?
+
+## 2026-10-18 — The rebuilt seed goes live, and the last six write flows get clicked
+
+**The fix is live.** The rebuilt fixture from yesterday's entry was reseeded
+into production, checked against the public demo API, and pushed
+(`e153bd8..c979b2d`). The run printed 21 items / 37 review rows / streak 14 /
+due 5, and the live API agreed: 5 due on the seed day (two overdue — 5 and 1
+days — plus three due), 8 due the day after, streak 14, 14 active days in
+2026 against 12 in 2025, FIXED 19 / ADAPTIVE 2, grades GOOD 2 / HARD 1.
+The run is dated **2026-10-17** even though it happened on the 18th: the
+seed script's `today()` is the UTC date and the run was before 06:30 Myanmar
+time. So a browser already on the 18th reads the seed day's queue as
+"overdue by 1 day" — the data is consistent with itself, it just isn't the
+day the browser thinks it is. Recorded in the handover so nobody chases it
+as a bug later.
+
+**Two hiccups worth keeping.** (1) The first run refused to start: an empty
+`DEMO_PASSWORD` tripped the script's guard, which exits *before* any database
+work, so nothing was touched — the guard did exactly the job it was written
+for. (2) Neon's suspended compute took longer to wake than the app's
+deliberate 5 s connect timeout, so the first query after an idle night died
+with `Connection terminated due to connection timeout`; nothing was written,
+and running it again connected in about a second. Both are already the docs'
+story (`developer-handover.md` §12a point 6 for the timeout, `c979b2d`), and
+this session confirmed them from the other side.
+
+**The six write flows that had never been clicked.** Review/grade, skip,
+change password, export download, register and suspend were the only flows
+never exercised end to end. All six were run against the local Docker stack
+and checked **in the database**, not just on screen:
+
+- A Fixed item walked the whole ladder: stage 0 → 1 with the next date 7 days
+  after the review, 1 → 2 with the next date `finalIntervalDays` (30) after
+  it, and the third review archived the item — exactly what
+  `schedule.service.js` says, with a REVIEWED row added each time.
+- A skip moved one item one day forward and left its stage alone (SKIPPED
+  row, grade null).
+- The first Adaptive review with grade Good produced exactly the numbers the
+  FSRS service computes (stability 2.3065, difficulty 2.1181, next review 2
+  days), and the item page's label followed it: "stability 2.3d", curve
+  "Today · 100%", history "Reviewed · Good".
+- Changing the password rotated the stored hash, bumped `tokenVersion` (old
+  sessions signed out — the UI says so), made the old password fail with 401
+  and the new one work, and was then changed back.
+- "Download my items" really downloaded a file (`my-items-2026-10-18.json`)
+  containing every item with its review rows, and no password hash. Ticking
+  "Include deleted" added the soft-deleted item; leaving it off did not.
+- Registering a new account landed logged in, with the empty-state
+  explanation, and its first item came out FIXED / stage 0 / due in 2 days.
+- Admin suspend/unsuspend: Esc on the confirm box wrote nothing, confirming
+  it suspended the user (login now 403 `ACCOUNT_SUSPENDED`), unsuspending
+  let them back in (200), and the demo account still has no Suspend button.
+
+No bugs in any of the six. The read-only demo account was re-checked as
+well: every write control is disabled, and the server answers
+`403 DEMO_READ_ONLY` to add/review/skip without changing a single row.
+
+**New concepts**
+
+- **The empty check has to run first.** A guard that refuses *before* opening
+  the database is worth more than one that refuses after — the second kind
+  has already made the mess it's refusing.
+- **A write flow is a database fact, not a button.** The screen can look
+  right while the wrong column moves; every check above ends in a SQL query,
+  and the two disagreeing would have been the bug.
+
+**You should be able to explain**
+
+1. Why does a reseed before 06:30 Myanmar time leave the demo account
+   looking "a day behind" — and why is that not a bug?
+2. Why is "the button worked" not evidence that a write flow works, and what
+   did the Adaptive review prove that a screenshot could not?

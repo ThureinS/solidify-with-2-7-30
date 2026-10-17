@@ -861,13 +861,23 @@ Vercel projects (§12a), and they can finish deploying at different times.
 5. A CORS preflight answers `Access-Control-Max-Age: 600` (U19 fix B).
 
 **Demo data:** seeded on prod with `scripts/seed-test-data.js` (run by the
-user, never through chat; the 2026-10-07 run — "5 due, weeks up to
-2026-10-05" — used the old fixture, and a reseed with the rebuilt one
-replaces it). The script prints the streak and due count from the database
-at the end of every run, so trust that output over any number written here.
-The public demo account is `stats-test@example.com` (`src/lib/demoAccount.js`);
-`demo@example.com` is only the local `prisma/seed.js` user. The data is
-relative to the seed day, so run it again on the morning of a demo.
+user, never through chat). The 2026-10-07 run ("5 due, weeks up to
+2026-10-05") still used the old round-robin fixture. **The run that is live
+now is 2026-10-18** — the first prod run of the rebuilt fixture — and it
+printed 21 items / 37 review rows / streak 14 / due 5. Checked against the
+public demo API straight after: due @2026-10-17 = 5 (two overdue — 5 and 1
+days — plus three due), due @2026-10-18 = 8, streak 14, 2026 = 14 active
+days, 2025 = 12, modes FIXED 19 / ADAPTIVE 2, grades GOOD 2 / HARD 1, and
+the pre-reseed item ids 404 as expected. That run is dated **2026-10-17**,
+not 10-18, because the script's `today()` is the UTC date and it ran before
+06:30 Myanmar time; a browser already on the 18th therefore reads the seed
+day's queue as "overdue by 1 day" — consistent data, just not the day the
+browser thinks it is. The script prints the streak and due count from the
+database at the end of every run, so trust that output over any number
+written here. The public demo account is `stats-test@example.com`
+(`src/lib/demoAccount.js`); `demo@example.com` is only the local
+`prisma/seed.js` user. The data is relative to the seed day, so run it
+again on the morning of a demo.
 
 **Decided, not built:** the cold start (about 1.5 s extra after a few idle
 minutes) stays as it is. Moving the function region or keeping it warm was
