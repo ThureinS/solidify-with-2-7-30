@@ -645,8 +645,15 @@ swallows stat-fetch errors (`.catch(() => {})`), that combination fails
 6. **Reseed on demo day.** Everything the fixture builds is relative to the
    day it runs: the streak ends on seed day and the due items are dated to
    it. Measured decay: streak 14 on seed day, 14 the day after, **0** by
-   day three. (Also worth a fresh `DEMO_PASSWORD` if reseeding — the
-   2026-07-31 run used a placeholder-looking password by accident.)
+   day three; the due queue grows a little per skipped day (items are
+   honestly scheduled now, so yesterday's due items just get more overdue).
+   **2026-10-17: the fixture was rebuilt** — every review row now follows
+   the item's real 2-7-30/FSRS schedule (`scripts/seedFixture.js`; the old
+   round-robin rows produced impossible histories, see §12d), and the
+   script prints the real streak/due numbers at the end of each run instead
+   of predicting them by hand. (Also worth a fresh `DEMO_PASSWORD` if
+   reseeding — the 2026-07-31 run used a placeholder-looking password by
+   accident.)
 
 Known demo gotcha, no fix planned: the daily goal lives in `localStorage`,
 which is per-origin. A goal set on the production URL won't exist on a Vercel
@@ -848,8 +855,11 @@ Vercel projects (§12a), and they can finish deploying at different times.
 4. Stats: weeks with no activity show as 0 (lane LC).
 5. A CORS preflight answers `Access-Control-Max-Age: 600` (U19 fix B).
 
-**Demo data:** reseeded on prod 2026-10-07 with `scripts/seed-test-data.js`
-(user ran it; checked on the live demo API: 5 due, weeks up to 2026-10-05).
+**Demo data:** seeded on prod with `scripts/seed-test-data.js` (run by the
+user, never through chat; the 2026-10-07 run — "5 due, weeks up to
+2026-10-05" — used the old fixture, and a reseed with the rebuilt one
+replaces it). The script prints the streak and due count from the database
+at the end of every run, so trust that output over any number written here.
 The public demo account is `stats-test@example.com` (`src/lib/demoAccount.js`);
 `demo@example.com` is only the local `prisma/seed.js` user. The data is
 relative to the seed day, so run it again on the morning of a demo.
@@ -862,10 +872,24 @@ considered and rejected.
 `e153bd8` (`/demo` links back to the real app) were pushed and checked
 live. Live checks as admin and as `stats-test` passed (read-only).
 
-**Known issue, fix planned:** `scripts/seed-test-data.js` gives review rows
-to Fixed items in turn (`addDay()`), not by their schedule. On the demo
-account's item pages this shows impossible histories: reviews before the
-item was added, 20+ reviews at stage 0, a review and a skip on the same day.
-The planned fix simulates each Fixed item through the real `applyReview` /
-`applySkip`, then the prod seed is run again. After that, the numbers above
-("streak 14", "5 due") will change.
+**Fixed 2026-10-17 — the seed-data problem.** `scripts/seed-test-data.js`
+used to give review rows to Fixed items in turn (`addDay()`), not by their
+schedule; the demo account's item pages showed impossible histories
+(reviews before the item was added, 20+ reviews at stage 0, a review and a
+skip on the same day). The fixture now lives in `scripts/seedFixture.js`:
+every Fixed item is walked day by day from `fixedStartOfLife`, acted on
+only when due, through the real `applyReview` / `applySkip` — an impossible
+sequence throws during the build instead of seeding quietly. The two
+Adaptive items keep their real FSRS runs, shifted so the last review lands
+3 days before the seed day. Personality rules (prompt, skip-once/twice,
+late-by-1/2, forgot) give the calendar its full/half/empty texture, and
+items whose personality is still "waiting" when the walk ends are what the
+fresh seed opens with: a real "Due today" queue (currently 5 items, one 5
+days overdue — the U7 string) plus a couple of actions already logged on
+the seed day. `tests/seedFixture.test.js` replays every item's rows from
+start-of-life back into its declared state on three seed days, and pins
+those demo promises; a deliberately injected "review on a still-due item
+today" makes 9 of its 24 tests fail. The script reads the streak and due
+count back through `items.service.getCurrentStreak` / `listDueItems` and
+prints them at the end of every run, so no number in this file needs
+updating when the fixture changes.

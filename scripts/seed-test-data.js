@@ -3,6 +3,14 @@
 // Not part of the graded seed contract -- safe to re-run, only ever touches
 // the one account below.
 //
+// The fixture itself (items, review rows, dates) lives in ./seedFixture.js,
+// kept pure so tests/seedFixture.test.js can replay every row through the
+// real schedule functions. Every row here is one the app could really have
+// produced: reviews follow each item's actual 2-7-30 or FSRS schedule, so no
+// row is dated before its item was added and nothing is reviewed after it
+// archives. (The old version handed rows out round-robin and produced
+// impossible histories -- found 2026-10-07, see developer-handover.md.)
+//
 // Meant to be run against production too, so the deployed app always has a
 // presentable account. Two guards, because a deliberate prod run and an
 // accidental one look identical from inside the script:
@@ -14,8 +22,9 @@
 //   prod:  DEMO_PASSWORD=... node --env-file=.env.production scripts/seed-test-data.js --confirm
 const bcrypt = require('bcrypt');
 const prisma = require('../src/lib/prisma');
-const { parseDate, addDays, toDateString, daysBetween } = require('../src/lib/dates');
-const schedule = require('../src/services/schedule.service');
+const { parseDate, toDateString } = require('../src/lib/dates');
+const { buildFixture } = require('./seedFixture');
+const itemsService = require('../src/services/items.service');
 const { DEMO_ACCOUNT_EMAIL } = require('../src/lib/demoAccount');
 
 const EMAIL = process.env.DEMO_EMAIL || DEMO_ACCOUNT_EMAIL;
@@ -51,40 +60,6 @@ function today() {
   return parseDate(new Date().toISOString().slice(0, 10));
 }
 
-// Runs a fabricated grade sequence through the real schedule.applyReview --
-// the same pure function production reviews use -- so an Adaptive demo
-// item's difficulty/stability are genuine FSRS output, never hand-picked
-// numbers (ADR 0003's spirit: even fake seed data shouldn't misrepresent
-// what the algorithm actually computes). The sequence is simulated from a
-// nominal start date, then every date is shifted by a constant so the
-// *last* review lands `lastReviewDaysAgo` days before `t` -- simulating
-// forward from `t` directly isn't possible because each review's due date
-// depends on the interval FSRS computes from the previous one, which isn't
-// known until it's actually run.
-function simulateAdaptiveItem(t, grades, lastReviewDaysAgo) {
-  let state = schedule.adaptiveStartOfLife('2000-01-01');
-  const reviewDates = [];
-  let dueDate = state.nextReviewDate;
-  for (const grade of grades) {
-    const fakeItem = { mode: 'ADAPTIVE', isComplete: false, ...state };
-    const delta = schedule.applyReview(fakeItem, toDateString(dueDate), grade);
-    reviewDates.push(dueDate);
-    state = { ...state, ...delta };
-    dueDate = state.nextReviewDate;
-  }
-
-  const shiftDays = daysBetween(reviewDates[reviewDates.length - 1], addDays(t, -lastReviewDaysAgo));
-  return {
-    dateAdded: addDays(reviewDates[0], shiftDays),
-    state: {
-      ...state,
-      lastReviewDate: addDays(state.lastReviewDate, shiftDays),
-      nextReviewDate: addDays(state.nextReviewDate, shiftDays),
-    },
-    reviewRows: reviewDates.map((date, i) => ({ date: addDays(date, shiftDays), result: 'REVIEWED', grade: grades[i] })),
-  };
-}
-
 async function main() {
   console.log(`Seeding ${EMAIL} on ${dbHost}${isLocal ? '' : ' (NOT local)'}`);
 
@@ -102,97 +77,39 @@ async function main() {
   await prisma.item.deleteMany({ where: { userId: user.id } });
 
   const t = today();
+  const todayStr = toDateString(t);
+  const fixture = buildFixture(t);
 
-  // A handful of items in different states, just so reviews have something
-  // to attach to and "All items" has variety too. The unfinished ones are due
-  // on the day you seed, not two days later: this fixture exists to be looked
-  // at, and a "Due today" tab with nothing in it is the worst first screen.
-  const items = await Promise.all(
-    [
-      { text: 'Capital of Mongolia is Ulaanbaatar', stage: 0, isComplete: false },
-      { text: 'React useEffect cleanup runs before the next effect', stage: 1, isComplete: false },
-      { text: 'TCP three-way handshake: SYN, SYN-ACK, ACK', stage: 2, isComplete: false },
-      { text: 'Mitochondria is the powerhouse of the cell', stage: 2, isComplete: true },
-      { text: 'Big-O of binary search is O(log n)', stage: 2, isComplete: true },
-      { text: "Prisma's @@index needs both columns for a composite lookup", stage: 1, isComplete: false },
-    ].map(({ text, stage, isComplete }) =>
-      prisma.item.create({
-        data: {
-          userId: user.id,
-          text,
-          dateAdded: addDays(t, -60),
-          nextReviewDate: isComplete ? addDays(t, -30) : t,
-          stage,
-          isComplete,
-        },
-      })
-    )
-  );
-
-  // Two Adaptive items, kept out of the `items` array above so addDay()
-  // below (which only ever attaches to Fixed items) can't attach an
-  // ungraded review row to one at a date that contradicts its simulated
-  // FSRS state. One has real review history (via simulateAdaptiveItem, see
-  // above); the other is brand new with no history yet, since "no curve
-  // yet" (stability: null) is Adaptive's common first state, not a rare
-  // edge case (see implementation-journey.md's step 2 entry) -- worth
-  // showing honestly rather than only ever seeding "reviewed" items.
-  const reviewed3DaysAgo = simulateAdaptiveItem(t, ['GOOD', 'HARD', 'GOOD'], 3);
-  const adaptiveReviewed = await prisma.item.create({
-    data: {
-      userId: user.id,
-      text: 'FSRS schedules the next review from Stability, not a fixed ladder',
-      dateAdded: reviewed3DaysAgo.dateAdded,
-      ...reviewed3DaysAgo.state,
-    },
-  });
-  await prisma.review.createMany({
-    data: reviewed3DaysAgo.reviewRows.map((r) => ({ ...r, itemId: adaptiveReviewed.id })),
-  });
-
-  await prisma.item.create({
-    data: {
-      userId: user.id,
-      text: "Retrievability is FSRS's predicted recall probability right now",
-      dateAdded: t,
-      ...schedule.adaptiveStartOfLife(toDateString(t)),
-    },
-  });
-
+  // One create per item (not createMany) because each review row needs its
+  // own item's fresh id.
   const rows = [];
-  function addDay(dayOffset, reviewed, skipped) {
-    const date = addDays(t, dayOffset);
-    const item = items[Math.abs(dayOffset) % items.length].id;
-    for (let i = 0; i < reviewed; i++) rows.push({ itemId: item, date, result: 'REVIEWED' });
-    for (let i = 0; i < skipped; i++) rows.push({ itemId: item, date, result: 'SKIPPED' });
+  for (const spec of fixture) {
+    const item = await prisma.item.create({
+      data: { userId: user.id, text: spec.text, dateAdded: spec.dateAdded, ...spec.state },
+    });
+    for (const row of spec.reviews) rows.push({ itemId: item.id, ...row });
   }
-
-  // Last 90 days: a repeating pattern (rest day / skip-only / mixed / reviewed-only)
-  // so the heatmap shows all three states plus real gaps.
-  for (let offset = -90; offset <= -8; offset++) {
-    const i = -offset;
-    if (i % 7 === 0) continue; // gap day, nothing logged
-    if (i % 5 === 0) addDay(offset, 0, 1); // skip-only -> 'half'
-    else if (i % 3 === 0) addDay(offset, 1, 1); // mixed -> 'half'
-    else addDay(offset, (i % 4) + 1, 0); // reviewed-only -> 'full'
-  }
-
-  // Last 8 days incl. today: clean unbroken streak, all reviewed-only.
-  for (let offset = -7; offset <= 0; offset++) addDay(offset, 1, 0);
-
-  // A few rows from last year, to test the year switcher on the history page.
-  for (const offset of [-400, -395, -388, -370]) addDay(offset, 1, 0);
-
   await prisma.review.createMany({ data: rows });
 
-  const reviewed = rows.filter((r) => r.result === 'REVIEWED').length;
+  // The summary is read back from the database through the same service
+  // functions the API uses -- never hand-written "expect" lines, which drift
+  // the moment the fixture changes (the old version predicted "streak 14,
+  // 164 rows" and had to be kept in sync by hand).
+  const streak = await itemsService.getCurrentStreak(user.id, todayStr);
+  const due = await itemsService.listDueItems(user.id, todayStr);
+  const overdue = due.filter((item) => toDateString(item.nextReviewDate) < todayStr).length;
+
+  const fixed = fixture.filter((item) => item.state.mode === 'FIXED');
+  const archived = fixed.filter((item) => item.state.isComplete).length;
+  const reviewed = rows.filter((row) => row.result === 'REVIEWED').length;
+
   // Password deliberately not echoed -- it's yours, in DEMO_PASSWORD, and
   // terminal scrollback and CI logs both outlive this run.
   console.log(`Seeded ${EMAIL} (password: whatever you passed as DEMO_PASSWORD)`);
+  console.log(`${fixture.length} items (${fixed.length} Fixed, ${archived} archived; ${fixture.length - fixed.length} Adaptive)`);
   console.log(`${rows.length} review rows (${reviewed} reviewed, ${rows.length - reviewed} skipped)`);
-  console.log('Expect current streak = 14 days (base pattern fills back to day -13, gap at day -14), plus 4 rows from ~last year');
-  console.log('Expect 5 items due today (4 Fixed + 1 brand-new Adaptive item with no review history yet).');
-  console.log('Plus 1 Adaptive item reviewed 3 times (last review 3 days ago, not due yet) -- shows a real memory-decay curve.');
+  console.log(`Current streak: ${streak} day(s)  (items.service.getCurrentStreak)`);
+  console.log(`Due today: ${due.length} items, ${overdue} of them overdue  (items.service.listDueItems)`);
   console.log('All of the above are relative to TODAY -- reseed on the day you want to show this off.');
 }
 

@@ -3730,3 +3730,108 @@ is planned for the next session.
 
 1. Why did the bad seed data stay hidden until item pages got their own
    URLs, even though it had existed since July?
+
+## 2026-10-17 — Honest seed data: every demo history now follows the real schedule
+
+**What was built.** The seed-data problem from 2026-10-07 is fixed. The
+fixture moved out of `scripts/seed-test-data.js` into a new pure module,
+`scripts/seedFixture.js`, so a test can exercise it without a database:
+
+- Every Fixed item is simulated **day by day** from
+  `schedule.fixedStartOfLife(dateAdded, 30)`; on each day the item is due,
+  the walk calls the real `applyReview` / `applySkip` and spreads the
+  result into the state. Errors are deliberately not caught: an impossible
+  sequence (an early review, a review after archiving) throws during the
+  build instead of quietly seeding a history the app could never have
+  produced.
+- A small set of "personalities" — PROMPT, SKIP_ONCE, SKIP_TWICE, LATE1,
+  LATE2, FORGOT — decides what each item does on a day it finds itself due.
+  That is what keeps the demo lived-in: prompt items make full days, skip
+  days make half days, late ones leave a gap between the due date and the
+  row, and the FORGOT item is never acted on, which is how the fixture
+  keeps an honestly overdue item.
+- Items appear over time: one per day for the last two weeks, three from
+  ~13 months ago whose whole ladders run in the previous calendar year
+  (that is what the History year switcher needs), and the two Adaptive
+  items unchanged in spirit — a real GOOD/HARD/GOOD run shifted so its
+  last review lands 3 days before the seed day, plus a brand-new one.
+
+**A subtle bug the walk itself surfaced.** The first personality version
+decided from "days overdue" alone. But `applySkip` moves the next review
+date forward by one day — so "skip at 0 days overdue, review at 1" would
+skip forever, one day at a time, because every day after a skip is again
+0 days overdue. The fix: the personality function also receives a "skips
+since last review" counter. Rules about lateness and rules about skipping
+are not the same axis.
+
+**Decisions, explained**
+
+- **The walk runs through the seed day itself**, not up to yesterday. A
+  few actions are therefore already logged on the seed day (today: two
+  reviews and a skip), and the items whose personality is still "waiting"
+  stay due. This makes a better opening than a completely untouched day:
+  History shows a partially filled moon, and the streak doesn't collapse
+  to 0 if the demo slips a day (measured: 14 on seed day, 14 the day
+  after, 0 by day three — same decay as before, but with a fuller start).
+- **The due queue is an output of the fixture, not a hardcoded list.** The
+  current fixture leaves 5 due on the seed day: one 5 days overdue (the
+  U7 string), one 1 day overdue, three due today. The script prints the
+  real streak and due count from `items.service.getCurrentStreak` /
+  `listDueItems` after writing, so the old hand-written "Expect current
+  streak = 14" lines are gone for good.
+
+**The test (`tests/seedFixture.test.js`, 24 tests).** Because the fixture
+is pure (no database, no randomness), the test replays every item's rows
+from start-of-life through the same schedule functions the app uses and
+requires the result to equal the state the fixture declares. It runs on
+three seed days: a mid-month Saturday, 2027-01-02 (where the ~13-month-old
+items land two calendar years back), and a leap day, 2028-02-29. Beyond
+the replay it pins the demo promises: no row before its item was added, no
+review + skip for the same item/day, no still-due item with a row today,
+≥4 due with exactly one 5-days-overdue item that was never touched,
+activity in both the current and the previous calendar year, and
+full/half/empty days within the last three weeks. Teeth check: injecting
+one "review today on a still-due item" (the original bug's exact shape)
+makes 9 of the 24 tests fail.
+
+**Verified on the real stack, not just the test.**
+
+- Local Docker Postgres: migrations applied, seed ran, and four SQL
+  integrity queries returned 0 (rows before `dateAdded`, review+skip on
+  the same item/day, a due-today item with a row today, rows dated in the
+  future).
+- Backend API: the due list is the expected 5; stats show Fixed 19 /
+  Adaptive 2 with grades Good 2 / Hard 1; the FSRS item answers stability
+  26.4d and "Today · 98%" on its curve; the 2025 history has exactly the
+  12 active days the three old ladders produce.
+- Frontend, clicked through in the browser against that seed: the 5-day
+  overdue item's page says "overdue by 5 days" and shows an empty (honest)
+  history; the Mitochondria item shows exactly S/S/R/S on the right
+  dates — a history the old fixture could not have produced; the Adaptive
+  curve renders "Today · 98%"; October's moons match the fixture
+  row-for-row, and the year switcher shows the 2025 activity. The demo
+  account is read-only by design (ADR 0004), so its buttons were greyed
+  out and no writes were possible — expected.
+
+**Docs updated:** `developer-handover.md` §12a point 6 (decay note) and
+§12d (demo-data section; "Known issue" → "Fixed 2026-10-17"), the seed
+script's header comment, and this entry.
+
+**New concepts**
+
+- **A fixture is data with an invariant.** "Looks busy" is not the spec;
+  "replayable through the app's own functions" is. Once the invariant is
+  testable, demo numbers stop being something to maintain by hand.
+- **Same word, different clock.** "Days overdue" and "days since the
+  scheduled date" diverge the moment a skip happens, because a skip moves
+  the schedule. Two counters, not one.
+
+**You should be able to explain**
+
+1. Why did the round-robin fixture survive from July until item pages got
+   their own URLs, and what does replaying a history through
+   `applyReview` / `applySkip` actually prove?
+2. Why is a skip day not the same thing as a late day, and why does the
+   personality function need a skip counter on top of "days overdue"?
+3. Why does the walk stop on the seed day and leave some items due,
+   instead of completing every schedule and opening with a clean day?
