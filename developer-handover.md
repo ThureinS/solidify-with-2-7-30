@@ -653,7 +653,12 @@ swallows stat-fetch errors (`.catch(() => {})`), that combination fails
    script prints the real streak/due numbers at the end of each run instead
    of predicting them by hand. (Also worth a fresh `DEMO_PASSWORD` if
    reseeding — the 2026-07-31 run used a placeholder-looking password by
-   accident.)
+   accident.) **Cold start (seen 2026-10-18):** the first run after the
+   database has sat idle can stop with `Connection terminated due to
+   connection timeout` — Neon's suspended compute takes longer to wake
+   than the app's deliberate 5 s connect timeout (`src/lib/prisma.js`).
+   Nothing is written (it fails on the very first query); run it again and
+   it connects in about a second (measured: 4.0 s cold, 0.8 s right after).
 
 Known demo gotcha, no fix planned: the daily goal lives in `localStorage`,
 which is per-origin. A goal set on the production URL won't exist on a Vercel
